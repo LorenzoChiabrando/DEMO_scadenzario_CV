@@ -1,0 +1,25 @@
+/* asset/style.qss */
+QListWidget {
+    background-color: #2b3035;
+    color: #e0e0e0;
+    border: none;
+    font-size: 16px;
+    font-family: Arial, sans-serif;
+    outline: 0; /* Rimuove il bordo tratteggiato di selezione tipico di Windows/Linux */
+}
+
+QListWidget::item {
+    padding: 12px 20px;
+    margin: 8px 15px; /* Crea spazio attorno all'elemento, staccandolo dai bordi */
+    border-radius: 8px; /* Angoli arrotondati per un look moderno */
+}
+
+QListWidget::item:selected {
+    background-color: #0d6efd; /* Blu acceso */
+    color: white;
+    font-weight: bold;
+}
+
+QListWidget::item:hover:!selected {
+    background-color: #3a3f44; /* Grigio leggermente più chiaro al passaggio del mouse */
+}

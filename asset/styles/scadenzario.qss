@@ -1,0 +1,99 @@
+ViewScadenzario { 
+    background-color: #f4f6f9; 
+}
+
+QPushButton#btnNav { 
+    background-color: #e9ecef; 
+    color: #495057; 
+    font-weight: bold; 
+    font-size: 24px; 
+    border-radius: 25px; 
+    border: none; 
+}
+QPushButton#btnNav:hover { 
+    background-color: #0d6efd; 
+    color: white; 
+}
+
+QPushButton#btnMeseAnno { 
+    font-family: 'Segoe UI', Arial, sans-serif;
+    font-size: 40px; 
+    font-weight: 900; 
+    color: #1f2937; 
+    background-color: transparent; 
+    border: none; 
+    padding: 5px 25px;
+    border-radius: 12px;
+}
+QPushButton#btnMeseAnno:hover { 
+    color: #0d6efd; 
+    background-color: #e2e8f0; 
+}
+
+QTableWidget { 
+    background-color: white; 
+    alternate-background-color: #f8f9fa; 
+    gridline-color: #dee2e6; 
+    border: 1px solid #dee2e6; 
+    border-radius: 8px; 
+    font-size: 15px; 
+    color: #212529; 
+}
+QHeaderView::section { 
+    background-color: #e9ecef; 
+    color: #495057; 
+    font-weight: bold; 
+    border: 1px solid #dee2e6; 
+    padding: 5px; 
+}
+QTableCornerButton::section { 
+    background-color: #e9ecef; 
+    border: 1px solid #dee2e6; 
+}
+QTableWidget::item:selected { 
+    background-color: #cfe2ff; 
+    color: #084298; 
+}
+
+/*  SCROLLBAR  STILE horizontal and vertical */
+QScrollBar:horizontal {
+    border: none;
+    background: #f4f6f9;
+    height: 12px;
+    margin: 0px 0px 0px 0px;
+    border-radius: 6px;
+}
+QScrollBar::handle:horizontal {
+    background: #adb5bd;
+    min-width: 30px;
+    border-radius: 6px;
+}
+QScrollBar::handle:horizontal:hover {
+    background: #6c757d;
+}
+QScrollBar::add-line:horizontal, QScrollBar::sub-line:horizontal {
+    border: none;
+    background: none;
+    width: 0px;
+}
+
+QScrollBar:vertical {
+    border: none;
+    background: #f4f6f9;
+    width: 12px;
+    margin: 0px 0px 0px 0px;
+    border-radius: 6px;
+}
+QScrollBar::handle:vertical {
+    background: #adb5bd;
+    min-height: 30px;
+    border-radius: 6px;
+}
+QScrollBar::handle:vertical:hover {
+    background: #6c757d;
+}
+QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical {
+    border: none;
+    background: none;
+    height: 0px;
+}
