@@ -1,0 +1,309 @@
+/* =========================================
+   BASE E CARD PRINCIPALI
+========================================= */
+ViewLibretto {
+    background-color: #f0f2f5;
+}
+
+QFrame#MainCard, QFrame#CardDettaglio {
+    background-color: #ffffff;
+    border-radius: 15px;
+    border: 1px solid #e2e8f0;
+}
+
+/* =========================================
+   BARRA DI RICERCA
+========================================= */
+QFrame#SearchContainer {
+    background-color: #f8fafc;
+    border: 2px solid #cbd5e1;
+    border-radius: 15px;
+}
+QFrame#SearchContainer:hover {
+    border: 2px solid #6f42c1;
+}
+QLineEdit#SearchBar {
+    border: none;
+    background-color: transparent;
+    font-size: 20px;
+    color: #334155;
+}
+
+/* =========================================
+   CHECKBOX FILTRI
+========================================= */
+QCheckBox { 
+    font-size: 15px; 
+    color: #475569; 
+    font-weight: bold; 
+    spacing: 8px; 
+}
+QCheckBox::indicator {
+    width: 22px; 
+    height: 22px;
+    border: 2px solid #cbd5e1; 
+    border-radius: 5px; 
+    background-color: #f8fafc;
+}
+QCheckBox::indicator:hover { 
+    border: 2px solid #6f42c1; 
+}
+QCheckBox::indicator:checked {
+    background-color: #6f42c1; 
+    border: 2px solid #6f42c1;
+    image: url(data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAyNCAyNCIgZmlsbD0ibm9uZSIgc3Ryb2tlPSJ3aGl0ZSIgc3Ryb2tlLXdpZHRoPSI0IiBzdHJva2UtbGluZWNhcD0icm91bmQiIHN0cm9rZS1saW5lam9pbj0icm91bmQiPjxwb2x5bGluZSBwb2ludHM9IjIwIDYgOSAxNyA0IDEyIj48L3BvbHlsaW5lPjwvc3ZnPg==);
+}
+
+/* =========================================
+   LISTA RISULTATI E CONTENITORE
+========================================= */
+QListWidget#ListaRisultati {
+    border: 1px solid #cbd5e1; 
+    background-color: #f8fafc; 
+    border-radius: 12px;
+    outline: 0px;
+    padding: 10px;
+}
+
+QListWidget#ListaRisultati::item { 
+    background-color: #ffffff; 
+    border: 1px solid #cbd5e1; 
+    border-radius: 8px; 
+    color: #1e293b; 
+    font-size: 22px; 
+    font-family: "Segoe UI";
+    font-weight: bold; 
+    min-height: 75px; 
+    padding-left: 30px; 
+    padding-top: 0px; 
+    padding-bottom: 0px;
+}
+
+QListWidget#ListaRisultati::item:hover { 
+    background-color: #faf5ff; 
+    border: 1px solid #c084fc; 
+}
+
+QListWidget#ListaRisultati::item:selected { 
+    background-color: #f3e8ff; 
+    color: #4c1d95; 
+    font-weight: bold;
+    border: 2px solid #6f42c1; 
+}
+
+/* =========================================
+   SCROLLBAR LISTA RISULTATI
+========================================= */
+QListWidget#ListaRisultati QScrollBar:vertical {
+    border: none;
+    background: transparent; 
+    width: 10px; 
+    margin: 4px; 
+    border-radius: 5px;
+}
+QListWidget#ListaRisultati QScrollBar::handle:vertical {
+    background: #cbd5e1; 
+    min-height: 30px;
+    border-radius: 5px;
+}
+QListWidget#ListaRisultati QScrollBar::handle:vertical:hover {
+    background: #94a3b8; 
+}
+QListWidget#ListaRisultati QScrollBar::add-line:vertical, 
+QListWidget#ListaRisultati QScrollBar::sub-line:vertical {
+    height: 0px; 
+    background: none;
+}
+
+/* =========================================
+   PULSANTI
+========================================= */
+QPushButton#BtnApri { 
+    background-color: #6f42c1; 
+    color: white; 
+    font-weight: bold; 
+    font-size: 16px; 
+    border-radius: 10px; 
+    letter-spacing: 1px; 
+}
+QPushButton#BtnApri:hover { 
+    background-color: #5936a2; 
+}
+QPushButton#BtnApri:disabled { 
+    background-color: #cbd5e1; 
+    color: #94a3b8; 
+}
+
+QPushButton#BtnAggiungi { 
+    background-color: #ffffff; 
+    color: #0f172a; 
+    font-weight: bold; 
+    font-size: 16px; 
+    border-radius: 10px; 
+    border: 2px solid #cbd5e1; 
+    padding: 10px; 
+    text-align: center;
+}
+QPushButton#BtnAggiungi:hover { 
+    background-color: #f3e8ff;  
+    border: 2px solid #6f42c1;  
+    color: #6f42c1;            
+}
+QPushButton#BtnAggiungi:pressed { 
+    background-color: #e9d5ff; 
+}
+
+QPushButton#BtnIndietro {
+    background-color: #ffffff; 
+    color: #495057; 
+    font-weight: bold;
+    border: 2px solid #dee2e6; 
+    border-radius: 8px; 
+    font-size: 15px;
+}
+QPushButton#BtnIndietro:hover { 
+    background-color: #e2e6ea; 
+    color: #6f42c1; 
+    border-color: #6f42c1; 
+}
+
+/* =========================================
+   TABELLA LIBRETTO (Mockup)
+========================================= */
+QTableWidget#TabellaLibretto {
+    border: 1px solid #e2e8f0; 
+    border-radius: 8px;
+    background-color: white; 
+    alternate-background-color: #f8fafc;
+    font-size: 15px; 
+    color: #334155;
+    outline: 0px;
+}
+QTableWidget#TabellaLibretto QHeaderView::section {
+    background-color: #f1f5f9; 
+    font-weight: bold; 
+    color: #475569;
+    border: none; 
+    border-bottom: 2px solid #cbd5e1; 
+    padding: 10px;
+}
+
+/* =========================================
+   DIALOG NUOVO SPECIALIZZANDO
+========================================= */
+DialogNuovoSpecializzando {
+    background-color: #f8fafc;
+}
+QLineEdit#InputDialog, QComboBox#ComboDialog {
+    background-color: #ffffff;
+    border: 2px solid #cbd5e1;
+    border-radius: 8px;
+    padding: 10px;
+    font-size: 16px;
+    color: #334155;
+}
+QLineEdit#InputDialog:focus, QComboBox#ComboDialog:focus {
+    border: 2px solid #6f42c1;
+}
+QComboBox#ComboDialog::drop-down { 
+    border: none; 
+    width: 30px; 
+}
+QComboBox#ComboDialog::down-arrow {
+    image: url(data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIxNiIgaGVpZ2h0PSIxNiIgdmlld0JveD0iMCAwIDI0IDI0IiBmaWxsPSJub25lIiBzdHJva2U9IiM2NDc0OGIiIHN0cm9rZS13aWR0aD0iMiIgc3Ryb2tlLWxpbmVjYXA9InJvdW5kIiBzdHJva2UtbGluZWpvaW49InJvdW5kIj48cG9seWxpbmUgcG9pbnRzPSI2IDkgMTIgMTUgMTggOSI+PC9wb2x5bGluZT48L3N2Zz4=);
+}
+QPushButton#BtnAnnullaDialog {
+    background-color: #f1f5f9; 
+    color: #64748b; 
+    font-weight: bold; 
+    border-radius: 8px; 
+    font-size: 15px;
+}
+QPushButton#BtnAnnullaDialog:hover { 
+    background-color: #e2e8f0; 
+    color: #334155; 
+}
+
+/* =========================================
+   PULSANTE SALVA DIALOG
+========================================= */
+QPushButton#BtnSalvaDialog {
+    background-color: #6f42c1; 
+    color: white;
+    font-weight: bold; 
+    border-radius: 8px; 
+    font-size: 15px;
+}
+QPushButton#BtnSalvaDialog:hover { 
+    background-color: #5936a2; 
+}
+
+/* =========================================
+   TITOLO DIALOG NUOVO SPECIALIZZANDO
+========================================= */
+QLabel#TitoloDialog {
+    color: #1e293b;
+    font-family: "Segoe UI";
+    font-size: 20px;
+    font-weight: bold;
+}
+
+/* =========================================
+   LISTA A TENDINA (COMBOBOX DROPDOWN)
+========================================= */
+QComboBox#ComboDialog {
+    combobox-popup: 0;
+    background-color: #ffffff;
+    border: 2px solid #cbd5e1;
+    border-radius: 8px;
+    padding: 10px;
+    font-size: 16px;
+    color: #334155;
+}
+QComboBox#ComboDialog:focus {
+    border: 2px solid #6f42c1;
+}
+QComboBox#ComboDialog QAbstractItemView {
+    border: 1px solid #cbd5e1;
+    border-radius: 8px;
+    background-color: #ffffff;
+    outline: 0px;
+    padding: 4px;
+}
+QComboBox#ComboDialog QAbstractItemView::item {
+    min-height: 35px;
+    border-radius: 4px;
+    color: #1e293b;
+    padding-left: 8px;
+}
+QComboBox#ComboDialog QAbstractItemView::item:hover,
+QComboBox#ComboDialog QAbstractItemView::item:selected {
+    background-color: #f3e8ff;
+    color: #4c1d95;
+}
+
+/* =========================================
+   DETTAGLI SPECIALIZZANDO E INFO
+========================================= */
+QLabel#LblInfo {
+    color: #64748b;
+    font-weight: bold;
+    font-size: 14px;
+    text-transform: uppercase;
+}
+
+QLabel#ValInfo, QLabel#ValInfoScore {
+    color: #1e293b;
+    font-size: 18px;
+    font-weight: bold;
+    background-color: #f8fafc;
+    padding: 10px;
+    border-radius: 8px;
+    border: 1px solid #e2e8f0;
+}
+
+QLabel#ValInfoScore {
+    color: #6f42c1;
+    background-color: #f3e8ff;
+    border: 1px dashed #6f42c1;
+}

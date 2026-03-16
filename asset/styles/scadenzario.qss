@@ -1,5 +1,77 @@
+/* =========================================
+   DASHBOARD E BOTTONI NAVIGAZIONE
+========================================= */
 ViewScadenzario { 
     background-color: #f4f6f9; 
+}
+
+QLabel#TitoloSelezione {
+    font-family: "Segoe UI";
+    font-size: 32px;
+    font-weight: bold;
+    color: #6f42c1;
+    letter-spacing: 2px;
+}
+
+QPushButton#BtnIndietroScadenzario {
+    background-color: #f8f9fa;
+    color: #495057;
+    font-weight: bold;
+    border: 2px solid #dee2e6;
+    border-radius: 8px;
+    font-size: 15px;
+}
+QPushButton#BtnIndietroScadenzario:hover {
+    background-color: #e2e6ea;
+    color: #6f42c1;
+    border-color: #6f42c1;
+}
+
+QLabel#LblModalita {
+    font-family: "Arial";
+    font-size: 14px;
+    font-weight: bold;
+    color: #6c757d;
+    background-color: #e9ecef;
+    padding: 10px 15px;
+    border-radius: 8px;
+}
+
+QPushButton#BtnConvalida { 
+    background-color: #198754; 
+    color: white; 
+    font-weight: bold; 
+    border-radius: 12px; 
+    font-size: 18px;
+    letter-spacing: 1px;
+    border: 2px solid #146c43;
+}
+QPushButton#BtnConvalida:hover { 
+    background-color: #157347; 
+    border: 2px solid #a3cfbb;
+}
+
+QPushButton#CardButton {
+    background-color: white;
+    border: 2px solid #e2e8f0;
+    border-radius: 20px;
+}
+QPushButton#CardButton:hover {
+    border: 3px solid #6f42c1;
+    background-color: #f8f9fa;
+}
+
+QLabel#CardTitolo {
+    font-family: "Segoe UI";
+    font-size: 24px;
+    font-weight: bold;
+    color: #2b3035;
+}
+
+QLabel#CardDescrizione {
+    color: #6c757d;
+    font-size: 16px;
+    margin-top: 5px;
 }
 
 QPushButton#btnNav { 
@@ -16,9 +88,9 @@ QPushButton#btnNav:hover {
 }
 
 QPushButton#btnMeseAnno { 
-    font-family: 'Segoe UI', Arial, sans-serif;
+    font-family: "Segoe UI", Arial, sans-serif;
     font-size: 40px; 
-    font-weight: 900; 
+    font-weight: bold; 
     color: #1f2937; 
     background-color: transparent; 
     border: none; 
@@ -30,32 +102,9 @@ QPushButton#btnMeseAnno:hover {
     background-color: #e2e8f0; 
 }
 
-QTableWidget { 
-    background-color: white; 
-    alternate-background-color: #f8f9fa; 
-    gridline-color: #dee2e6; 
-    border: 1px solid #dee2e6; 
-    border-radius: 8px; 
-    font-size: 15px; 
-    color: #212529; 
-}
-QHeaderView::section { 
-    background-color: #e9ecef; 
-    color: #495057; 
-    font-weight: bold; 
-    border: 1px solid #dee2e6; 
-    padding: 5px; 
-}
-QTableCornerButton::section { 
-    background-color: #e9ecef; 
-    border: 1px solid #dee2e6; 
-}
-QTableWidget::item:selected { 
-    background-color: #cfe2ff; 
-    color: #084298; 
-}
-
-/*  SCROLLBAR  STILE horizontal and vertical */
+/* =========================================
+   SCROLLBAR (Orizzontale e Verticale)
+========================================= */
 QScrollBar:horizontal {
     border: none;
     background: #f4f6f9;
@@ -96,4 +145,132 @@ QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical {
     border: none;
     background: none;
     height: 0px;
+}
+
+/* =========================================
+   TABELLA CALENDARIO
+========================================= */
+QTableWidget { 
+    background-color: white; 
+    alternate-background-color: #f8f9fa; 
+    gridline-color: #dee2e6; 
+    border: 1px solid #dee2e6; 
+    border-radius: 8px; 
+    font-size: 15px; 
+    color: #212529; 
+    outline: 0px;
+}
+QTableWidget::item {
+    padding: 5px;
+}
+
+QTableWidget::item:selected { 
+    background-color: #f3e8ff; 
+    color: #4c1d95; 
+}
+
+QHeaderView::section:horizontal {
+    background-color: #e2e8f0; 
+    color: #1e293b;
+    font-weight: bold;
+    font-size: 18px;
+    border: 1px solid #cbd5e1; 
+    padding: 10px;
+}
+
+QHeaderView::section:vertical {
+    background-color: #f1f5f9; 
+    color: #334155;
+    font-weight: bold;
+    font-size: 14px;
+    border: 1px solid #cbd5e1;
+    padding: 5px 15px;
+}
+
+QTableCornerButton::section { 
+    background-color: #cbd5e1; 
+    border: 1px solid #cbd5e1;
+}
+
+/* =========================================
+   MENU A TENDINA E SPUNTE (QComboBox)
+========================================= */
+QComboBox {
+    combobox-popup: 0;
+    background-color: #ffffff; 
+    border: 2px solid transparent;
+    border-radius: 6px;
+    padding: 2px 8px;
+    font-size: 15px;
+    color: #1e293b;
+    font-weight: bold;
+}
+QComboBox:hover, QComboBox:focus {
+    border: 2px solid #6f42c1;
+    background-color: #ffffff;
+}
+QComboBox::drop-down {
+    border: none;
+    width: 25px;
+}
+QComboBox::down-arrow {
+    image: url(data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIxNiIgaGVpZ2h0PSIxNiIgdmlld0JveD0iMCAwIDI0IDI0IiBmaWxsPSJub25lIiBzdHJva2U9IiM2NDc0OGIiIHN0cm9rZS13aWR0aD0iMiIgc3Ryb2tlLWxpbmVjYXA9InJvdW5kIiBzdHJva2UtbGluZWpvaW49InJvdW5kIj48cG9seWxpbmUgcG9pbnRzPSI2IDkgMTIgMTUgMTggOSI+PC9wb2x5bGluZT48L3N2Zz4=);
+}
+
+/* =========================================
+   LISTA ESPANSA E RIGHE 
+========================================= */
+QComboBox QAbstractItemView {
+    border: 1px solid #cbd5e1;
+    border-radius: 8px;
+    background-color: #ffffff;
+    outline: 0px;
+    padding: 4px;
+}
+
+QComboBox QAbstractItemView::item {
+    min-height: 35px;
+    border-radius: 4px; 
+    color: #1e293b;
+    background-color: transparent;
+}
+
+QComboBox QAbstractItemView::item:hover {
+    background-color: #f3e8ff; 
+    color: #4c1d95; 
+}
+
+QComboBox QAbstractItemView::item:selected {
+    background-color: #6f42c1; 
+    color: #ffffff; 
+}
+
+/* =========================================
+   SCROLLBAR SPECIFICA PER IL MENU A TENDINA
+========================================= */
+QComboBox QAbstractItemView QScrollBar:vertical {
+    border: none;
+    background: #f1f5f9; 
+    width: 14px; 
+    margin: 2px;
+    border-radius: 6px;
+}
+QComboBox QAbstractItemView QScrollBar::handle:vertical {
+    background: #94a3b8; 
+    min-height: 25px;
+    border-radius: 5px;
+}
+QComboBox QAbstractItemView QScrollBar::handle:vertical:hover {
+    background: #6f42c1; 
+}
+QComboBox QAbstractItemView QScrollBar::add-line:vertical, 
+QComboBox QAbstractItemView QScrollBar::sub-line:vertical {
+    height: 0px; 
+    background: none;
+}
+
+QComboBox::indicator:checked {
+    background-color: #6f42c1;
+    border: 1px solid #6f42c1;
+    image: url(data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAyNCAyNCIgZmlsbD0ibm9uZSIgc3Ryb2tlPSJ3aGl0ZSIgc3Ryb2tlLXdpZHRoPSI0IiBzdHJva2UtbGluZWNhcD0icm91bmQiIHN0cm9rZS1saW5lam9pbj0icm91bmQiPjxwb2x5bGluZSBwb2ludHM9IjIwIDYgOSAxNyA0IDEyIj48L3BvbHlsaW5lPjwvc3ZnPg==);
 }

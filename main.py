@@ -2,11 +2,15 @@ import sys
 from PySide6.QtWidgets import QApplication, QMainWindow, QWidget, QHBoxLayout, QStackedWidget
 from src.views.view_sidebar import Sidebar
 from src.views.view_scadenzario import ViewScadenzario
+from src.views.view_pazienti import ViewPazienti
 from src.views.view_sale_operatorie import ViewSaleOperatorie
 from src.views.view_libretto import ViewLibretto
 from src.models.data_manager import DataManager
 from src.controllers.controller_scadenzario import ControllerScadenzario
-
+from src.models.data_manager_libretto import DataManagerLibretto
+from src.controllers.controller_libretto import ControllerLibretto
+from src.models.data_manager_pazienti import DataManagerPazienti
+from src.controllers.controller_pazienti import ControllerPazienti
 
 class MainWindow(QMainWindow):
     def __init__(self):
@@ -15,6 +19,15 @@ class MainWindow(QMainWindow):
         self.view_scad = None
         self.controller_scad = None
         self.data_manager = None
+        
+        self.view_libretto = None
+        self.controller_libretto = None
+        self.data_manager_libretto = None
+
+        self.view_pazienti = None
+        self.controller_pazienti = None
+        self.data_manager_pazienti = None
+
         self.setWindowTitle("MMSD CV - Demo Mockup")
         self.resize(1024, 768)
 
@@ -41,10 +54,18 @@ class MainWindow(QMainWindow):
         self.view_scad = ViewScadenzario()
         self.controller_scad = ControllerScadenzario(self.view_scad, self.data_manager)
 
+        self.data_manager_libretto = DataManagerLibretto()
+        self.view_libretto = ViewLibretto()
+        self.controller_libretto = ControllerLibretto(self.view_libretto, self.data_manager_libretto)
+
+        self.data_manager_pazienti = DataManagerPazienti()
+        self.view_pazienti = ViewPazienti()
+        self.controller_pazienti = ControllerPazienti(self.view_pazienti, self.data_manager_pazienti)
+
         self.body_stack.addWidget(self.view_scad)
         self.body_stack.addWidget(ViewSaleOperatorie())
-        self.body_stack.addWidget(ViewLibretto())
-
+        self.body_stack.addWidget(self.view_libretto)
+        self.body_stack.addWidget(self.view_pazienti)
 
 if __name__ == "__main__":
     app = QApplication(sys.argv)
