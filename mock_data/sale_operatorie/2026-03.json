@@ -1,0 +1,157 @@
+{
+  "metadata": {
+    "stato": "CONVALIDATO"
+  },
+  "turni": {
+    "2026-03-02": {
+      "specializzandi": {
+        "OR I": "Bianchi G.",
+        "OR II": "Verdi L."
+      },
+      "8.00-10.00": {
+        "nome_paziente": "Mario Ferro",
+        "diagnosi": "a",
+        "intervento": "x.y",
+        "chirurgo": "Dott. Pitti G."
+      },
+      "10.00-12.00": {
+        "nome_paziente": "Luca Itta",
+        "diagnosi": "b",
+        "intervento": "x.y",
+        "chirurgo": "Dott.ssa Bosco L."
+      },
+      "14.00-16.00": {
+        "nome_paziente": "Giulia Ferri",
+        "diagnosi": "c",
+        "intervento": "x.y",
+        "chirurgo": "Dott. Colombo M."
+      },
+      "16.00-18.00": {
+        "nome_paziente": "Andrea Galli",
+        "diagnosi": "d",
+        "intervento": "x.y",
+        "chirurgo": "Dott.ssa Ricci F."
+      }
+    },
+    "2026-03-03": {
+      "specializzandi": {
+        "OR I": "Bianchi G.",
+        "OR II": "Verdi L."
+      },
+      "8.00-10.00": {
+        "nome_paziente": "Mario Ferro",
+        "diagnosi": "a",
+        "intervento": "x.y",
+        "chirurgo": "Dott. Pitti G."
+      },
+      "10.00-12.00": {
+        "nome_paziente": "Luca Itta",
+        "diagnosi": "b",
+        "intervento": "x.y",
+        "chirurgo": "Dott.ssa Bosco L."
+      },
+      "14.00-16.00": {
+        "nome_paziente": "Giulia Ferri",
+        "diagnosi": "c",
+        "intervento": "x.y",
+        "chirurgo": "Dott. Colombo M."
+      },
+      "16.00-18.00": {
+        "nome_paziente": "Andrea Galli",
+        "diagnosi": "d",
+        "intervento": "x.y",
+        "chirurgo": "Dott.ssa Ricci F."
+      }
+    },
+    "2026-03-04": {
+      "specializzandi": {
+        "OR I": "Bianchi G.",
+        "OR II": "Verdi L."
+      },
+      "8.00-10.00": {
+        "nome_paziente": "Mario Ferro",
+        "diagnosi": "a",
+        "intervento": "x.y",
+        "chirurgo": "Dott. Pitti G."
+      },
+      "10.00-12.00": {
+        "nome_paziente": "Luca Itta",
+        "diagnosi": "b",
+        "intervento": "x.y",
+        "chirurgo": "Dott.ssa Bosco L."
+      },
+      "14.00-16.00": {
+        "nome_paziente": "Giulia Ferri",
+        "diagnosi": "c",
+        "intervento": "x.y",
+        "chirurgo": "Dott. Colombo M."
+      },
+      "16.00-18.00": {
+        "nome_paziente": "Andrea Galli",
+        "diagnosi": "d",
+        "intervento": "x.y",
+        "chirurgo": "Dott.ssa Ricci F."
+      }
+    },
+    "2026-03-05": {
+      "specializzandi": {
+        "OR I": "Bianchi G.",
+        "OR II": "Verdi L."
+      },
+      "8.00-10.00": {
+        "nome_paziente": "Mario Ferro",
+        "diagnosi": "a",
+        "intervento": "x.y",
+        "chirurgo": "Dott. Pitti G."
+      },
+      "10.00-12.00": {
+        "nome_paziente": "Luca Itta",
+        "diagnosi": "b",
+        "intervento": "x.y",
+        "chirurgo": "Dott.ssa Bosco L."
+      },
+      "14.00-16.00": {
+        "nome_paziente": "Giulia Ferri",
+        "diagnosi": "c",
+        "intervento": "x.y",
+        "chirurgo": "Dott. Colombo M."
+      },
+      "16.00-18.00": {
+        "nome_paziente": "Andrea Galli",
+        "diagnosi": "d",
+        "intervento": "x.y",
+        "chirurgo": "Dott.ssa Ricci F."
+      }
+    },
+    "2026-03-06": {
+      "specializzandi": {
+        "OR I": "Bianchi G.",
+        "OR II": "Verdi L."
+      },
+      "8.00-10.00": {
+        "nome_paziente": "Mario Ferro",
+        "diagnosi": "a",
+        "intervento": "x.y",
+        "chirurgo": "Dott. Pitti G."
+      },
+      "10.00-12.00": {
+        "nome_paziente": "Luca Itta",
+        "diagnosi": "b",
+        "intervento": "x.y",
+        "chirurgo": "Dott.ssa Bosco L."
+      },
+      "14.00-16.00": {
+        "nome_paziente": "Giulia Ferri",
+        "diagnosi": "c",
+        "intervento": "x.y",
+        "chirurgo": "Dott. Colombo M."
+      },
+      "16.00-18.00": {
+        "nome_paziente": "Andrea Galli",
+        "diagnosi": "d",
+        "intervento": "x.y",
+        "chirurgo": "Dott.ssa Ricci F."
+      }
+    }
+  }
+}

@@ -1,5 +1,8 @@
 import sys
 from PySide6.QtWidgets import QApplication, QMainWindow, QWidget, QHBoxLayout, QStackedWidget
+
+from src.controllers.controller_sale_operatorie import ControllerSaleOperatorie
+from src.models.data_manager_sale_operatorie import DataManagerSaleOperatorie
 from src.views.view_sidebar import Sidebar
 from src.views.view_scadenzario import ViewScadenzario
 from src.views.view_pazienti import ViewPazienti
@@ -27,6 +30,10 @@ class MainWindow(QMainWindow):
         self.view_pazienti = None
         self.controller_pazienti = None
         self.data_manager_pazienti = None
+
+        self.view_sale_operatorie = None
+        self.controller_sale_operatorie = None
+        self.data_manager_sale_operatorie = None
 
         self.setWindowTitle("MMSD CV - Demo Mockup")
         self.resize(1024, 768)
@@ -62,8 +69,12 @@ class MainWindow(QMainWindow):
         self.view_pazienti = ViewPazienti()
         self.controller_pazienti = ControllerPazienti(self.view_pazienti, self.data_manager_pazienti)
 
+        self.data_manager_sale_operatorie = DataManagerSaleOperatorie()
+        self.view_sale_operatorie = ViewSaleOperatorie()
+        self.controller_sale_operatorie = ControllerSaleOperatorie(self.view_sale_operatorie, self.data_manager_sale_operatorie)
+
         self.body_stack.addWidget(self.view_scad)
-        self.body_stack.addWidget(ViewSaleOperatorie())
+        self.body_stack.addWidget(self.view_sale_operatorie)
         self.body_stack.addWidget(self.view_libretto)
         self.body_stack.addWidget(self.view_pazienti)
 
