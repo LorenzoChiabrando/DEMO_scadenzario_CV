@@ -49,5 +49,31 @@ class DataManagerLibretto:
         filepath = os.path.join(self.dir_libretti, f"{nuovo_id}.json")
         with open(filepath, 'w', encoding='utf-8') as f:
             json.dump(nuovo_specializzando, f, indent=4)
-            
+
         return nuovo_specializzando
+
+    def aggiorna_specializzando(self, spec_id, dati):
+        """Aggiorna i campi anagrafici di uno specializzando esistente."""
+        filepath = os.path.join(self.dir_libretti, f"{spec_id}.json")
+        if not os.path.exists(filepath):
+            return None
+        with open(filepath, 'r', encoding='utf-8') as f:
+            spec = json.load(f)
+        spec.update({
+            "matricola": dati["matricola"],
+            "nome":      dati["nome"],
+            "cognome":   dati["cognome"],
+            "livello":   dati["livello"],
+            "stato":     dati["stato"],
+        })
+        with open(filepath, 'w', encoding='utf-8') as f:
+            json.dump(spec, f, indent=4)
+        return spec
+
+    def elimina_specializzando(self, spec_id):
+        """Elimina definitivamente il file JSON dello specializzando."""
+        filepath = os.path.join(self.dir_libretti, f"{spec_id}.json")
+        if os.path.exists(filepath):
+            os.remove(filepath)
+            return True
+        return False

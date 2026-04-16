@@ -1,13 +1,10 @@
 import calendar
 import datetime
-from PySide6.QtWidgets import (
-    QTableWidgetItem, QDialog, QVBoxLayout, QHBoxLayout, 
-    QComboBox, QSpinBox, QPushButton, QTableWidget, QMessageBox
-)
+from PySide6.QtWidgets import QTableWidget, QMessageBox
 from PySide6.QtCore import Qt
-from PySide6.QtGui import QColor, QFont  
 
 from src.views.components.combo_delegate import ComboBoxDelegate
+from src.views.dialog_mese_anno import DialogMeseAnno
 
 
 class ControllerScadenzario:
@@ -33,7 +30,7 @@ class ControllerScadenzario:
         self.view.btn_corrente.clicked.connect(lambda: self.apri_calendario("CORRENTE"))
         self.view.btn_pianificazione.clicked.connect(lambda: self.apri_calendario("PIANIFICAZIONE"))
         self.view.btn_indietro.clicked.connect(self.torna_alla_dashboard)
-        
+
         self.view.btn_convalida.clicked.connect(self.convalida_mese)
 
         self.view.btn_prev.clicked.connect(self.mese_precedente)
@@ -60,12 +57,12 @@ class ControllerScadenzario:
 
     def convalida_mese(self):
         risposta = QMessageBox.question(
-            self.view, 
-            "Conferma Convalida", 
+            self.view,
+            "Conferma Convalida",
             "Vuoi convalidare in via definitiva questo mese?\n\nUna volta convalidato, il mese passerà allo Storico e non sarà più modificabile.",
             QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No
         )
-        
+
         if risposta == QMessageBox.StandardButton.Yes:
             self.model.set_stato_mese(self.anno_corrente, self.mese_corrente, "CONVALIDATO")
             self.aggiorna_tabella()
@@ -73,24 +70,24 @@ class ControllerScadenzario:
     def apri_calendario(self, modalita):
         if modalita == "STORICO":
             max_history_date = self.get_max_history_date()
-            
+
             mesi_disp = self.model.get_mesi_disponibili()
             storici_validi = [(a, m) for a, m in mesi_disp if datetime.date(a, m, 1) <= max_history_date]
-            
+
             if not storici_validi:
                 QMessageBox.information(
-                    self.view, 
-                    "Nessuno storico", 
+                    self.view,
+                    "Nessuno storico",
                     "Non sono presenti dati di mesi passati o convalidati salvati nel sistema."
                 )
                 return
             else:
                 self.anno_corrente, self.mese_corrente = storici_validi[-1]
-        
+
         elif modalita in ["CORRENTE", "PIANIFICAZIONE"]:
             self.anno_corrente = self.real_anno
             self.mese_corrente = self.real_mese
-            
+
         self.modalita_corrente = modalita
         self.view.stacked_widget.setCurrentIndex(1)
         self.aggiorna_tabella()
@@ -117,10 +114,10 @@ class ControllerScadenzario:
 
             if view_date >= max_history_date:
                 self.view.btn_next.setVisible(False)
-                
+
             mesi_disp = self.model.get_mesi_disponibili()
             storici_validi = [(a, m) for a, m in mesi_disp if datetime.date(a, m, 1) <= max_history_date]
-            
+
             if storici_validi:
                 min_y, min_m = storici_validi[0]
                 min_history_date = datetime.date(min_y, min_m, 1)
@@ -150,23 +147,23 @@ class ControllerScadenzario:
         self.gestisci_navigazione()
 
         stato_json = self.model.get_stato_mese(self.anno_corrente, self.mese_corrente)
-        
+
         if self.modalita_corrente == "STORICO":
             self.view.tabella.setEditTriggers(QTableWidget.EditTrigger.NoEditTriggers)
             self.view.btn_convalida.setVisible(False)
-            
+
         elif self.modalita_corrente == "PIANIFICAZIONE":
-            self.view.tabella.setEditTriggers(QTableWidget.EditTrigger.AllEditTriggers)
+            if stato_json == "CONVALIDATO":
+                self.view.tabella.setEditTriggers(QTableWidget.EditTrigger.NoEditTriggers)
+            else:
+                self.view.tabella.setEditTriggers(QTableWidget.EditTrigger.AllEditTriggers)
             self.view.btn_convalida.setVisible(False)
-            
+
         elif self.modalita_corrente == "CORRENTE":
             self.view.tabella.setEditTriggers(QTableWidget.EditTrigger.NoEditTriggers)
-            if stato_json == "CONVALIDATO":
-                self.view.btn_convalida.setVisible(False)
-            else:
-                self.view.btn_convalida.setVisible(True)
+            self.view.btn_convalida.setVisible(stato_json != "CONVALIDATO")
 
-        self.view.lbl_modalita.setText(f"MODALITÀ: {self.modalita_corrente}  |  STATO: {stato_json}")
+        self.view.aggiorna_badge_modalita(self.modalita_corrente, stato_json)
 
         nome_mese = self.mesi_ita[self.mese_corrente - 1].upper()
         self.view.btn_mese_anno.setText(f"{nome_mese} {self.anno_corrente}")
@@ -176,11 +173,7 @@ class ControllerScadenzario:
         self.view.tabella.setColumnCount(num_giorni)
         self.view.tabella.setHorizontalHeaderLabels([str(i) for i in range(1, num_giorni + 1)])
 
-        colore_festivo = QColor("#f1f5f9") 
-        colore_normale = QColor(Qt.GlobalColor.transparent)
-
-        font_giorni = QFont("Segoe UI", 11, QFont.Weight.Bold)
-        font_celle = QFont("Segoe UI", 13, QFont.Weight.DemiBold)
+        oggi = datetime.date.today()
 
         for giorno in range(1, num_giorni + 1):
             data_corrente = datetime.date(self.anno_corrente, self.mese_corrente, giorno)
@@ -188,41 +181,22 @@ class ControllerScadenzario:
 
             giorno_settimana = data_corrente.weekday()
             is_festivo = giorno_settimana in (5, 6)
+            is_oggi = (data_corrente == oggi)
+            nome_giorno = self.giorni_ita[giorno_settimana].upper()
 
-            nome_giorno = self.giorni_ita[giorno_settimana].upper() 
-            item_giorno = QTableWidgetItem(nome_giorno)
-            item_giorno.setTextAlignment(Qt.AlignmentFlag.AlignCenter)
-            item_giorno.setFlags(item_giorno.flags() & ~Qt.ItemFlag.ItemIsEditable)
-            item_giorno.setBackground(colore_festivo if is_festivo else colore_normale)
-            item_giorno.setFont(font_giorni)
-            item_giorno.setForeground(QColor("#64748b")) 
-            self.view.tabella.setItem(0, giorno - 1, item_giorno)
-
+            self.view.tabella.setItem(0, giorno - 1, self.view.crea_item_giorno(nome_giorno, is_festivo, is_oggi))
 
             for riga in range(1, len(self.view.row_labels)):
                 nome_riga = self.view.row_labels[riga]
-
-                if is_festivo:
-                    item = QTableWidgetItem("-")
-                    item.setFlags(item.flags() & ~Qt.ItemFlag.ItemIsEditable)
-                    item.setForeground(QColor("#cbd5e1")) 
-                else:
-                    valore_salvato = self.model.get_valore_cella(data_str, nome_riga)
-                    item = QTableWidgetItem(valore_salvato)
-                    item.setForeground(QColor("#1e293b")) 
-
-                item.setTextAlignment(Qt.AlignmentFlag.AlignCenter)
-                item.setBackground(colore_festivo if is_festivo else colore_normale)
-                item.setFont(font_celle)
-
-                self.view.tabella.setItem(riga, giorno - 1, item)
+                valore = "-" if is_festivo else self.model.get_valore_cella(data_str, nome_riga)
+                self.view.tabella.setItem(riga, giorno - 1, self.view.crea_item_cella(valore, is_festivo, nome_riga, is_oggi))
 
         self.view.tabella.blockSignals(False)
 
     def salva_modifica_cella(self, riga, colonna):
         if riga == 0 or self.modalita_corrente in ["STORICO", "CORRENTE"]:
             return
-            
+
         if self.model.get_stato_mese(self.anno_corrente, self.mese_corrente) == "CONVALIDATO":
             return
 
@@ -235,6 +209,11 @@ class ControllerScadenzario:
         nuovo_valore = item.text() if item else ""
 
         self.model.set_valore_cella(data_str, nome_riga, nuovo_valore)
+
+        # Riapplica lo stile corretto alla cella appena modificata
+        is_festivo = data_corrente.weekday() in (5, 6)
+        is_oggi = (data_corrente == datetime.date.today())
+        self.view.aggiorna_stile_cella(riga, colonna, nuovo_valore, nome_riga, is_festivo, is_oggi)
 
     def mese_precedente(self):
         if self.mese_corrente == 1:
@@ -253,76 +232,42 @@ class ControllerScadenzario:
         self.aggiorna_tabella()
 
     def scegli_mese_anno(self):
-        dialog = QDialog(self.view)
-        dialog.setWindowTitle("Vai a...")
-        dialog.setFixedSize(300, 120)
-        dialog.setStyleSheet("""
-            QComboBox, QSpinBox { font-size: 16px; padding: 5px; }
-            QPushButton { background-color: #0d6efd; color: white; font-weight: bold; border-radius: 5px; padding: 8px; 
-            font-size: 14px; }
-            QPushButton:hover { background-color: #0b5ed7; }
-        """)
+        dialog = DialogMeseAnno(self.mesi_ita, self.mese_corrente, self.anno_corrente, self.view)
+        if not dialog.exec():
+            return
 
-        layout = QVBoxLayout(dialog)
-        h_layout = QHBoxLayout()
+        selected_mese, selected_anno = dialog.get_selezione()
+        selected_date = datetime.date(selected_anno, selected_mese, 1)
+        real_date = datetime.date(self.real_anno, self.real_mese, 1)
 
-        combo_mesi = QComboBox()
-        combo_mesi.addItems(self.mesi_ita)
-        combo_mesi.setCurrentIndex(self.mese_corrente - 1)
+        if self.modalita_corrente == "PIANIFICAZIONE" and selected_date < real_date:
+            self.mese_corrente = self.real_mese
+            self.anno_corrente = self.real_anno
 
-        spin_anno = QSpinBox()
-        spin_anno.setRange(2020, 2050)
-        spin_anno.setValue(self.anno_corrente)
+        elif self.modalita_corrente == "STORICO":
+            max_history_date = self.get_max_history_date()
 
-        h_layout.addWidget(combo_mesi)
-        h_layout.addWidget(spin_anno)
-        layout.addLayout(h_layout)
+            mesi_disp = self.model.get_mesi_disponibili()
+            storici_validi = [(a, m) for a, m in mesi_disp if datetime.date(a, m, 1) <= max_history_date]
 
-        btn_layout = QHBoxLayout()
-        btn_ok = QPushButton("Conferma")
-        btn_ok.clicked.connect(dialog.accept)
-        btn_cancel = QPushButton("Annulla")
-        btn_cancel.setStyleSheet("background-color: #6c757d;")
-        btn_cancel.clicked.connect(dialog.reject)
+            if not storici_validi:
+                self.mese_corrente = max_history_date.month
+                self.anno_corrente = max_history_date.year
+            else:
+                min_y, min_m = storici_validi[0]
+                min_history_date = datetime.date(min_y, min_m, 1)
 
-        btn_layout.addWidget(btn_cancel)
-        btn_layout.addWidget(btn_ok)
-        layout.addLayout(btn_layout)
-
-        if dialog.exec() == QDialog.DialogCode.Accepted:
-            selected_mese = combo_mesi.currentIndex() + 1
-            selected_anno = spin_anno.value()
-            selected_date = datetime.date(selected_anno, selected_mese, 1)
-            real_date = datetime.date(self.real_anno, self.real_mese, 1)
-
-            if self.modalita_corrente == "PIANIFICAZIONE" and selected_date < real_date:
-                self.mese_corrente = self.real_mese
-                self.anno_corrente = self.real_anno
-                
-            elif self.modalita_corrente == "STORICO":
-                max_history_date = self.get_max_history_date()
-                
-                mesi_disp = self.model.get_mesi_disponibili()
-                storici_validi = [(a, m) for a, m in mesi_disp if datetime.date(a, m, 1) <= max_history_date]
-                
-                if not storici_validi:
+                if selected_date > max_history_date:
                     self.mese_corrente = max_history_date.month
                     self.anno_corrente = max_history_date.year
+                elif selected_date < min_history_date:
+                    self.mese_corrente = min_m
+                    self.anno_corrente = min_y
                 else:
-                    min_y, min_m = storici_validi[0]
-                    min_history_date = datetime.date(min_y, min_m, 1)
-                    
-                    if selected_date > max_history_date:
-                        self.mese_corrente = max_history_date.month
-                        self.anno_corrente = max_history_date.year
-                    elif selected_date < min_history_date:
-                        self.mese_corrente = min_m
-                        self.anno_corrente = min_y
-                    else:
-                        self.mese_corrente = selected_mese
-                        self.anno_corrente = selected_anno
-            else:
-                self.mese_corrente = selected_mese
-                self.anno_corrente = selected_anno
+                    self.mese_corrente = selected_mese
+                    self.anno_corrente = selected_anno
+        else:
+            self.mese_corrente = selected_mese
+            self.anno_corrente = selected_anno
 
-            self.aggiorna_tabella()
+        self.aggiorna_tabella()

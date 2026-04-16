@@ -1,11 +1,11 @@
 import os
 from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QPushButton,
-    QTableWidget, QHeaderView, QScroller,
+    QTableWidget, QTableWidgetItem, QHeaderView, QScroller,
     QStackedWidget, QLabel, QSizePolicy, QGraphicsDropShadowEffect
 )
 from PySide6.QtCore import Qt
-from PySide6.QtGui import QPixmap, QColor
+from PySide6.QtGui import QPixmap, QColor, QFont
 
 
 class ViewSaleOperatorie(QWidget):
@@ -182,6 +182,29 @@ class ViewSaleOperatorie(QWidget):
         layout.addStretch()
 
         return btn
+
+    def crea_item_giorno(self, nome_giorno, is_festivo):
+        """Restituisce un QTableWidgetItem stilizzato per la riga del giorno."""
+        item = QTableWidgetItem(nome_giorno)
+        item.setTextAlignment(Qt.AlignmentFlag.AlignCenter)
+        item.setFlags(item.flags() & ~Qt.ItemFlag.ItemIsEditable)
+        item.setBackground(QColor("#f1f5f9") if is_festivo else QColor(Qt.GlobalColor.transparent))
+        item.setFont(QFont("Segoe UI", 11, QFont.Weight.Bold))
+        item.setForeground(QColor("#64748b"))
+        return item
+
+    def crea_item_cella(self, valore, is_festivo):
+        """Restituisce un QTableWidgetItem stilizzato per una cella dati."""
+        item = QTableWidgetItem(valore)
+        item.setTextAlignment(Qt.AlignmentFlag.AlignCenter)
+        item.setBackground(QColor("#f1f5f9") if is_festivo else QColor(Qt.GlobalColor.transparent))
+        item.setFont(QFont("Segoe UI", 13, QFont.Weight.DemiBold))
+        if is_festivo:
+            item.setFlags(item.flags() & ~Qt.ItemFlag.ItemIsEditable)
+            item.setForeground(QColor("#cbd5e1"))
+        else:
+            item.setForeground(QColor("#1e293b"))
+        return item
 
     def load_styles(self):
         style_path = os.path.join("asset", "styles", "sale_operatorie.qss")

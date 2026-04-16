@@ -1,102 +1,141 @@
 import os
 from PySide6.QtWidgets import (
     QDialog, QVBoxLayout, QHBoxLayout, QLabel,
-    QLineEdit, QComboBox, QPushButton, QMessageBox
+    QLineEdit, QComboBox, QPushButton, QMessageBox, QFrame
 )
 from PySide6.QtCore import Qt
 
+
 class DialogNuovoSpecializzando(QDialog):
-    def __init__(self, parent=None):
+    """
+    Dialog per aggiungere o modificare uno specializzando.
+    Se spec_dati è fornito, si apre in modalità modifica con i campi pre-compilati.
+    """
+    def __init__(self, parent=None, spec_dati=None):
         super().__init__(parent)
-        self.setWindowTitle("Nuovo Specializzando")
-        self.setFixedSize(450, 550) 
+        self._spec_dati  = spec_dati
+        self._edit_mode  = spec_dati is not None
+
+        self.setWindowTitle("Modifica Specializzando" if self._edit_mode else "Nuovo Specializzando")
+        self.setMinimumWidth(500)
+        self.setSizeGripEnabled(False)
         self.setup_ui()
+        if self._edit_mode:
+            self._precompila()
         self.load_styles()
 
     def setup_ui(self):
         layout = QVBoxLayout(self)
-        layout.setContentsMargins(30, 30, 30, 30)
-        layout.setSpacing(20)
+        layout.setContentsMargins(35, 35, 35, 35)
+        layout.setSpacing(0)
 
-        # Titolo senza stili inline
-        lbl_titolo = QLabel("Aggiungi Specializzando")
+        # Titolo
+        titolo_text = "Modifica Specializzando" if self._edit_mode else "Nuovo Specializzando"
+        lbl_titolo = QLabel(titolo_text)
         lbl_titolo.setObjectName("TitoloDialog")
-        lbl_titolo.setAlignment(Qt.AlignmentFlag.AlignCenter)
         layout.addWidget(lbl_titolo)
 
-        # Nuovo Campo Matricola
-        self.input_matricola = QLineEdit()
-        self.input_matricola.setObjectName("InputDialog")
-        self.input_matricola.setPlaceholderText("Matricola")
-        layout.addWidget(self.input_matricola)
+        sub_text = (
+            "Modifica i dati anagrafici dello specializzando."
+            if self._edit_mode else
+            "Compila i dati anagrafici per aggiungere uno specializzando al sistema."
+        )
+        lbl_sub = QLabel(sub_text)
+        lbl_sub.setObjectName("SottoTitoloDialog")
+        lbl_sub.setWordWrap(True)
+        layout.addWidget(lbl_sub)
 
-        # Campo Nome
-        self.input_nome = QLineEdit()
-        self.input_nome.setObjectName("InputDialog")
-        self.input_nome.setPlaceholderText("Nome")
-        layout.addWidget(self.input_nome)
+        # Separatore
+        sep = QFrame()
+        sep.setObjectName("SeparatoreDialog")
+        sep.setFixedHeight(1)
+        layout.addSpacing(18)
+        layout.addWidget(sep)
+        layout.addSpacing(18)
 
-        # Campo Cognome
-        self.input_cognome = QLineEdit()
-        self.input_cognome.setObjectName("InputDialog")
-        self.input_cognome.setPlaceholderText("Cognome")
-        layout.addWidget(self.input_cognome)
+        # Campi del form
+        _campi = [
+            ("Matricola *",       "input_matricola", False, None),
+            ("Nome *",            "input_nome",      False, None),
+            ("Cognome *",         "input_cognome",   False, None),
+            ("Livello Formativo", "combo_livello",   True,  ["Junior", "Senior"]),
+            ("Sede Attuale",      "combo_stato",     True,  ["Molinette", "Altra Sede", "Storico"]),
+        ]
 
-        # Menu a tendina Livello
-        self.combo_livello = QComboBox()
-        self.combo_livello.setObjectName("ComboDialog")
-        self.combo_livello.addItems(["Junior", "Senior"])
-        layout.addWidget(self.combo_livello)
+        for label_text, attr_name, is_combo, items in _campi:
+            lbl = QLabel(label_text)
+            lbl.setObjectName("LblCampo")
+            layout.addWidget(lbl)
+            layout.addSpacing(4)
 
-        # Menu a tendina Stato
-        self.combo_stato = QComboBox()
-        self.combo_stato.setObjectName("ComboDialog")
-        self.combo_stato.addItems(["Molinette", "Altra Sede", "Storico"])
-        layout.addWidget(self.combo_stato)
+            if is_combo:
+                widget = QComboBox()
+                widget.setObjectName("ComboDialog")
+                widget.addItems(items)
+            else:
+                widget = QLineEdit()
+                widget.setObjectName("InputDialog")
+                widget.setPlaceholderText(label_text.replace(" *", ""))
 
-        layout.addStretch()
+            widget.setFixedHeight(44)
+            layout.addWidget(widget)
+            layout.addSpacing(12)
+            setattr(self, attr_name, widget)
+
+        layout.addSpacing(8)
 
         # Bottoni
-        btn_layout = QHBoxLayout()
-        btn_layout.setSpacing(15)
+        btn_row = QHBoxLayout()
+        btn_row.setSpacing(14)
 
         self.btn_annulla = QPushButton("Annulla")
         self.btn_annulla.setObjectName("BtnAnnullaDialog")
-        self.btn_annulla.setFixedHeight(45)
+        self.btn_annulla.setFixedHeight(46)
         self.btn_annulla.setCursor(Qt.CursorShape.PointingHandCursor)
         self.btn_annulla.clicked.connect(self.reject)
 
-        self.btn_salva = QPushButton("Salva")
+        salva_text = "Salva Modifiche" if self._edit_mode else "Salva Specializzando"
+        self.btn_salva = QPushButton(salva_text)
         self.btn_salva.setObjectName("BtnSalvaDialog")
-        self.btn_salva.setFixedHeight(45)
+        self.btn_salva.setFixedHeight(46)
         self.btn_salva.setCursor(Qt.CursorShape.PointingHandCursor)
         self.btn_salva.clicked.connect(self.valida_e_salva)
 
-        btn_layout.addWidget(self.btn_annulla)
-        btn_layout.addWidget(self.btn_salva)
-        
-        layout.addLayout(btn_layout)
-        
+        btn_row.addWidget(self.btn_annulla)
+        btn_row.addWidget(self.btn_salva, stretch=2)
+        layout.addLayout(btn_row)
+
+    def _precompila(self):
+        """Pre-compila i campi con i dati dello specializzando esistente."""
+        self.input_matricola.setText(self._spec_dati.get("matricola", ""))
+        self.input_nome.setText(self._spec_dati.get("nome", ""))
+        self.input_cognome.setText(self._spec_dati.get("cognome", ""))
+
+        for combo, chiave in [(self.combo_livello, "livello"), (self.combo_stato, "stato")]:
+            idx = combo.findText(self._spec_dati.get(chiave, ""))
+            if idx >= 0:
+                combo.setCurrentIndex(idx)
+
     def valida_e_salva(self):
-        """Valida i campi prima di permettere la chiusura del dialog"""
         matricola = self.input_matricola.text().strip()
-        nome = self.input_nome.text().strip()
-        cognome = self.input_cognome.text().strip()
+        nome      = self.input_nome.text().strip()
+        cognome   = self.input_cognome.text().strip()
 
         if not matricola or not nome or not cognome:
-            QMessageBox.warning(self, "Campi Incompleti", "Attenzione: Nome, Cognome e Matricola sono campi obbligatori.")
-            return 
-
+            QMessageBox.warning(
+                self, "Campi Incompleti",
+                "Attenzione: Nome, Cognome e Matricola sono campi obbligatori."
+            )
+            return
         self.accept()
 
     def get_dati(self):
-        """Ritorna un dizionario con i dati inseriti nel form"""
         return {
             "matricola": self.input_matricola.text().strip(),
-            "nome": self.input_nome.text().strip(),
-            "cognome": self.input_cognome.text().strip(),
-            "livello": self.combo_livello.currentText(),
-            "stato": self.combo_stato.currentText()
+            "nome":      self.input_nome.text().strip(),
+            "cognome":   self.input_cognome.text().strip(),
+            "livello":   self.combo_livello.currentText(),
+            "stato":     self.combo_stato.currentText(),
         }
 
     def load_styles(self):

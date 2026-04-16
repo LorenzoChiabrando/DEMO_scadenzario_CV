@@ -77,8 +77,9 @@ class DataManagerSaleOperatorie:
 
         turno = data["turni"].get(data_str, {})
 
-        or1 = turno.get("specializzandi").get("OR I", "")
-        or2 = turno.get("specializzandi").get("OR II", "")
+        specializzandi = turno.get("specializzandi") or {}
+        or1 = specializzandi.get("OR I", "")
+        or2 = specializzandi.get("OR II", "")
 
         return f"{or1}\n{or2}".strip()
 

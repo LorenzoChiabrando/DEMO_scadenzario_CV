@@ -1,0 +1,34 @@
+{
+    "metadata": {
+        "stato": "BOZZA"
+    },
+    "turni": {
+        "2026-05-05": {
+            "Reparto I": "Bello M."
+        },
+        "2026-05-04": {
+            "Reparto II": "JAZZ B.",
+            "Sala Op. I": "Bello M.",
+            "Sala Op. II": ""
+        },
+        "2026-05-01": {
+            "Tipo Guardia": "118",
+            "Reparto I": "Gasparri A.",
+            "Reparto II": "Alga S.",
+            "Sala Op. I": "Gasparri A.",
+            "Sala Op. II": "Verdone V."
+        },
+        "2026-05-14": {
+            "Sala Op. I": "Bello M.",
+            "Sala Op. II": "Massima A."
+        },
+        "2026-05-13": {
+            "Sala Op. II": "Verdone V.",
+            "Sala Op. I": "Verdone V."
+        },
+        "2026-05-15": {
+            "Sala Op. I": "Massima A.",
+            "Sala Op. II": "Bello M."
+        }
+    }
+}

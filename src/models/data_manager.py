@@ -4,9 +4,9 @@ from datetime import datetime
 
 class DataManager:
     def __init__(self, dir_scadenzario="mock_data/scadenzario",
-                 filepath_anagrafica="mock_data/static_data/anagrafica_specializzandi.json"):
+                 dir_libretti="mock_data/libretti"):
         self.dir_scadenzario = dir_scadenzario
-        self.filepath_anagrafica = filepath_anagrafica
+        self.dir_libretti = dir_libretti
         self.specializzandi = self.load_anagrafica()
         
         self._cached_anno = None
@@ -50,15 +50,25 @@ class DataManager:
         self._cached_data = data
 
     def load_anagrafica(self):
-        if os.path.exists(self.filepath_anagrafica):
-            with open(self.filepath_anagrafica, 'r', encoding='utf-8') as f:
-                return json.load(f)
-        return []
+        """Carica tutti gli specializzandi dai file SP*.json nella cartella libretti."""
+        specializzandi = []
+        if not os.path.exists(self.dir_libretti):
+            return specializzandi
+        for filename in sorted(os.listdir(self.dir_libretti)):
+            if filename.endswith(".json"):
+                filepath = os.path.join(self.dir_libretti, filename)
+                try:
+                    with open(filepath, 'r', encoding='utf-8') as f:
+                        specializzandi.append(json.load(f))
+                except (json.JSONDecodeError, OSError):
+                    pass
+        return specializzandi
 
     def get_specializzandi_attivi(self):
+        """Restituisce i nomi degli specializzandi attivi alle Molinette."""
         attivi = []
         for spec in self.specializzandi:
-            if spec.get("attivo", False):
+            if spec.get("stato") == "Molinette":
                 nome_formattato = f"{spec['cognome']} {spec['nome'][0]}."
                 attivi.append(nome_formattato)
         return attivi

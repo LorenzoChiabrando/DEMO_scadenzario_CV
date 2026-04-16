@@ -1,11 +1,23 @@
 import os
 from PySide6.QtWidgets import (
-    QWidget, QVBoxLayout, QHBoxLayout, QLabel, QGridLayout,
-    QLineEdit, QCheckBox, QListWidget, QPushButton, QFrame, QGraphicsDropShadowEffect,
-    QStackedWidget, QTableWidget, QTableWidgetItem, QHeaderView
+    QWidget, QVBoxLayout, QHBoxLayout, QLabel, QFrame,
+    QLineEdit, QPushButton, QGraphicsDropShadowEffect,
+    QStackedWidget, QTableWidget, QHeaderView,
+    QListWidget, QListWidgetItem
 )
 from PySide6.QtCore import Qt, QSize
-from PySide6.QtGui import QFont, QColor, QIcon, QPixmap
+from PySide6.QtGui import QColor
+
+_COLORI_LIVELLO = {
+    "Junior": ("#dbeafe", "#1d4ed8"),
+    "Senior": ("#ede9fe", "#5b21b6"),
+}
+_COLORI_STATO = {
+    "Molinette":  ("#dcfce7", "#15803d"),
+    "Altra Sede": ("#fef9c3", "#854d0e"),
+    "Storico":    ("#f1f5f9", "#475569"),
+}
+
 
 class ViewLibretto(QWidget):
     def __init__(self):
@@ -15,213 +27,332 @@ class ViewLibretto(QWidget):
         self.load_styles()
 
     def setup_ui(self):
-        main_layout = QVBoxLayout(self)
-        main_layout.setContentsMargins(0, 0, 0, 0)
-
+        main = QVBoxLayout(self)
+        main.setContentsMargins(0, 0, 0, 0)
         self.stacked_widget = QStackedWidget()
-        main_layout.addWidget(self.stacked_widget)
+        main.addWidget(self.stacked_widget)
+        self._build_page_anagrafica()
+        self._build_page_dettaglio()
 
+    # ─── PAGE 0: ANAGRAFICA ────────────────────────────────────────────────────
+
+    def _build_page_anagrafica(self):
         self.page_anagrafica = QWidget()
-        anagrafica_layout = QVBoxLayout(self.page_anagrafica)
-        anagrafica_layout.setContentsMargins(40, 40, 40, 40)
-        anagrafica_layout.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        outer = QVBoxLayout(self.page_anagrafica)
+        outer.setContentsMargins(40, 40, 40, 40)
 
         self.card_container = QFrame()
         self.card_container.setObjectName("MainCard")
-        
         shadow = QGraphicsDropShadowEffect()
-        shadow.setBlurRadius(30)
-        shadow.setColor(QColor(0, 0, 0, 20))
-        shadow.setOffset(0, 5)
+        shadow.setBlurRadius(32)
+        shadow.setColor(QColor(0, 0, 0, 22))
+        shadow.setOffset(0, 6)
         self.card_container.setGraphicsEffect(shadow)
 
-        card_layout = QVBoxLayout(self.card_container)
-        card_layout.setContentsMargins(40, 40, 40, 40)
-        card_layout.setSpacing(20)
+        card = QVBoxLayout(self.card_container)
+        card.setContentsMargins(40, 35, 40, 40)
+        card.setSpacing(18)
 
-        titolo = QLabel("Anagrafica Specializzandi")
-        titolo.setFont(QFont("Segoe UI", 26, QFont.Weight.Bold))
-        titolo.setStyleSheet("color: #1e293b; letter-spacing: 1px;")
-        card_layout.addWidget(titolo)
+        # ── Header ──────────────────────────────────────────────────────────
+        header_row = QHBoxLayout()
+        titles = QVBoxLayout()
+        titles.setSpacing(3)
+        lbl_titolo = QLabel("Anagrafica Specializzandi")
+        lbl_titolo.setObjectName("TitoloSezione")
+        lbl_sottotitolo = QLabel("Gestione e consultazione dei libretti formativi")
+        lbl_sottotitolo.setObjectName("SottoTitoloSezione")
+        titles.addWidget(lbl_titolo)
+        titles.addWidget(lbl_sottotitolo)
+        header_row.addLayout(titles)
+        header_row.addStretch()
+        card.addLayout(header_row)
 
-        search_layout = QHBoxLayout()
-        search_layout.setContentsMargins(0, 15, 0, 20)
-        
+        # ── Barra di ricerca ─────────────────────────────────────────────────
         self.search_container = QFrame()
         self.search_container.setObjectName("SearchContainer")
-        self.search_container.setFixedHeight(75) 
-        
-        container_layout = QHBoxLayout(self.search_container)
-        container_layout.setContentsMargins(25, 0, 20, 0)
-        container_layout.setSpacing(15)
-
-        self.lbl_search_icon = QLabel()
-        if os.path.exists("asset/images/libretto/search.png"):
-            pixmap = QPixmap("asset/images/libretto/search.png").scaled(32, 32, Qt.AspectRatioMode.KeepAspectRatio, Qt.TransformationMode.SmoothTransformation)
-            self.lbl_search_icon.setPixmap(pixmap)
-        else:
-            self.lbl_search_icon.setText("Cerca:")
-            self.lbl_search_icon.setFont(QFont("Segoe UI", 16, QFont.Weight.Bold))
-        self.lbl_search_icon.setStyleSheet("border: none; background: transparent; color: #64748b;")
-
+        self.search_container.setFixedHeight(50)
+        sc = QHBoxLayout(self.search_container)
+        sc.setContentsMargins(16, 0, 16, 0)
+        sc.setSpacing(12)
+        lbl_icon = QLabel("🔍")
+        lbl_icon.setObjectName("SearchIcon")
         self.search_bar = QLineEdit()
         self.search_bar.setObjectName("SearchBar")
         self.search_bar.setPlaceholderText("Cerca per nome, cognome o matricola...")
-        
-        container_layout.addWidget(self.lbl_search_icon)
-        container_layout.addWidget(self.search_bar)
-        
-        search_layout.addWidget(self.search_container)
-        card_layout.addLayout(search_layout)
+        sc.addWidget(lbl_icon)
+        sc.addWidget(self.search_bar)
+        card.addWidget(self.search_container)
 
-        filtri_layout = QHBoxLayout()
-        filtri_layout.setSpacing(20)
-        
-        lbl_filtri = QLabel("Filtra per stato:")
-        lbl_filtri.setFont(QFont("Segoe UI", 14, QFont.Weight.Bold))
-        lbl_filtri.setStyleSheet("color: #64748b;") 
-        filtri_layout.addWidget(lbl_filtri)
+        # ── Chip filtri ───────────────────────────────────────────────────────
+        chips_row = QHBoxLayout()
+        chips_row.setSpacing(10)
+        lbl_filtri = QLabel("Visualizza:")
+        lbl_filtri.setObjectName("LblFiltri")
+        chips_row.addWidget(lbl_filtri)
 
-        self.chk_attiva_molinette = QCheckBox("Attivi (Molinette)")
-        self.chk_attiva_altre = QCheckBox("Attivi (Altra sede)")
-        self.chk_storico = QCheckBox("Storico / Terminati")
-
-        for chk in [self.chk_attiva_molinette, self.chk_attiva_altre, self.chk_storico]:
-            chk.setCursor(Qt.CursorShape.PointingHandCursor)
-            filtri_layout.addWidget(chk)
-
+        self.chk_attiva_molinette = QPushButton("● Molinette")
+        self.chk_attiva_molinette.setObjectName("ChipMolinette")
+        self.chk_attiva_molinette.setCheckable(True)
         self.chk_attiva_molinette.setChecked(True)
-        filtri_layout.addStretch()
-        card_layout.addLayout(filtri_layout)
-        
-        card_layout.addSpacing(10)
 
-        body_layout = QHBoxLayout()
-        body_layout.setSpacing(30)
+        self.chk_attiva_altre = QPushButton("● Altra Sede")
+        self.chk_attiva_altre.setObjectName("ChipAltraSede")
+        self.chk_attiva_altre.setCheckable(True)
+
+        self.chk_storico = QPushButton("● Storico")
+        self.chk_storico.setObjectName("ChipStorico")
+        self.chk_storico.setCheckable(True)
+
+        for chip in [self.chk_attiva_molinette, self.chk_attiva_altre, self.chk_storico]:
+            chip.setCursor(Qt.CursorShape.PointingHandCursor)
+            chip.setFixedHeight(34)
+            chips_row.addWidget(chip)
+        chips_row.addStretch()
+        card.addLayout(chips_row)
+
+        # ── Lista + bottoni ───────────────────────────────────────────────────
+        body = QHBoxLayout()
+        body.setSpacing(24)
 
         self.lista_risultati = QListWidget()
         self.lista_risultati.setObjectName("ListaRisultati")
         self.lista_risultati.setCursor(Qt.CursorShape.PointingHandCursor)
-        self.lista_risultati.setSpacing(4) 
-        
-        self._original_list_mousePressEvent = self.lista_risultati.mousePressEvent
-        def custom_list_mousePressEvent(event):
-            if not self.lista_risultati.itemAt(event.pos()):
+        self.lista_risultati.setSpacing(5)
+
+        # Deseleziona cliccando su area vuota
+        _orig = self.lista_risultati.mousePressEvent
+        def _on_click(ev):
+            if not self.lista_risultati.itemAt(ev.pos()):
                 self.lista_risultati.clearSelection()
-            self._original_list_mousePressEvent(event)
-        self.lista_risultati.mousePressEvent = custom_list_mousePressEvent
+            _orig(ev)
+        self.lista_risultati.mousePressEvent = _on_click
 
-        body_layout.addWidget(self.lista_risultati, stretch=7)
+        body.addWidget(self.lista_risultati, stretch=7)
 
-        btn_layout = QVBoxLayout()
-        btn_layout.setSpacing(20)
+        btn_col = QVBoxLayout()
+        btn_col.setSpacing(14)
 
         self.btn_apri = QPushButton("Apri Libretto")
         self.btn_apri.setObjectName("BtnApri")
-        self.btn_apri.setFixedHeight(60)
+        self.btn_apri.setFixedHeight(56)
         self.btn_apri.setCursor(Qt.CursorShape.PointingHandCursor)
         self.btn_apri.setEnabled(False)
 
-        self.btn_aggiungi = QPushButton(" Nuovo Specializzando")
+        self.btn_aggiungi = QPushButton("+ Nuovo Specializzando")
         self.btn_aggiungi.setObjectName("BtnAggiungi")
-        self.btn_aggiungi.setFixedHeight(60)
+        self.btn_aggiungi.setFixedHeight(56)
         self.btn_aggiungi.setCursor(Qt.CursorShape.PointingHandCursor)
-        
-        icona_plus = QIcon("asset/images/libretto/plus.png") 
-        self.btn_aggiungi.setIcon(icona_plus)
-        self.btn_aggiungi.setIconSize(QSize(28, 28)) 
 
-        btn_layout.addWidget(self.btn_apri)
-        btn_layout.addWidget(self.btn_aggiungi)
-        btn_layout.addStretch()
+        btn_col.addWidget(self.btn_apri)
+        btn_col.addWidget(self.btn_aggiungi)
+        btn_col.addStretch()
+        body.addLayout(btn_col, stretch=3)
+        card.addLayout(body)
 
-        body_layout.addLayout(btn_layout, stretch=3)
-        card_layout.addLayout(body_layout)
-        anagrafica_layout.addWidget(self.card_container)
-        
+        outer.addWidget(self.card_container)
         self.stacked_widget.addWidget(self.page_anagrafica)
 
+    # ─── PAGE 1: DETTAGLIO ────────────────────────────────────────────────────
+
+    def _build_page_dettaglio(self):
         self.page_dettaglio = QWidget()
-        dettaglio_layout = QVBoxLayout(self.page_dettaglio)
-        dettaglio_layout.setContentsMargins(40, 30, 40, 30)
-        dettaglio_layout.setSpacing(20)
+        layout = QVBoxLayout(self.page_dettaglio)
+        layout.setContentsMargins(40, 28, 40, 28)
+        layout.setSpacing(18)
 
-        nav_layout = QHBoxLayout()
-        self.btn_indietro = QPushButton("Indietro")
+        # Nav bar
+        nav = QHBoxLayout()
+        nav.setSpacing(12)
+
+        self.btn_indietro = QPushButton("← Indietro")
         self.btn_indietro.setObjectName("BtnIndietro")
-        self.btn_indietro.setFixedSize(220, 45)
+        self.btn_indietro.setFixedSize(150, 42)
         self.btn_indietro.setCursor(Qt.CursorShape.PointingHandCursor)
-        
-        self.lbl_nome_medico = QLabel("Libretto di: Seleziona Medico")
-        self.lbl_nome_medico.setFont(QFont("Segoe UI", 22, QFont.Weight.Bold))
-        self.lbl_nome_medico.setStyleSheet("color: #1e293b;")
-        self.lbl_nome_medico.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
+        nav.addWidget(self.btn_indietro)
+        nav.addStretch()
 
-        nav_layout.addWidget(self.btn_indietro)
-        nav_layout.addStretch()
-        nav_layout.addWidget(self.lbl_nome_medico)
+        # Nome specializzando: cognome grande + nome piccolo
+        name_block = QVBoxLayout()
+        name_block.setSpacing(1)
+        name_block.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
+        self.lbl_cognome_medico = QLabel("")
+        self.lbl_cognome_medico.setObjectName("LblCognomeMedico")
+        self.lbl_cognome_medico.setAlignment(Qt.AlignmentFlag.AlignRight)
+        self.lbl_nome_proprio_medico = QLabel("")
+        self.lbl_nome_proprio_medico.setObjectName("LblNomeProprioMedico")
+        self.lbl_nome_proprio_medico.setAlignment(Qt.AlignmentFlag.AlignRight)
+        name_block.addWidget(self.lbl_cognome_medico)
+        name_block.addWidget(self.lbl_nome_proprio_medico)
+        nav.addLayout(name_block)
 
-        dettaglio_layout.addLayout(nav_layout)
+        nav.addSpacing(20)
 
-        card_dettaglio = QFrame()
-        card_dettaglio.setObjectName("CardDettaglio")
-        card_dettaglio_layout = QVBoxLayout(card_dettaglio)
-        card_dettaglio_layout.setContentsMargins(40, 40, 40, 40)
-        card_dettaglio_layout.setSpacing(25)
+        self.btn_modifica = QPushButton("✏  Modifica")
+        self.btn_modifica.setObjectName("BtnModifica")
+        self.btn_modifica.setFixedHeight(42)
+        self.btn_modifica.setCursor(Qt.CursorShape.PointingHandCursor)
 
-        # -- sez informazioni--
-        grid_info = QGridLayout()
-        grid_info.setSpacing(20)
+        self.btn_elimina = QPushButton("🗑  Elimina")
+        self.btn_elimina.setObjectName("BtnElimina")
+        self.btn_elimina.setFixedHeight(42)
+        self.btn_elimina.setCursor(Qt.CursorShape.PointingHandCursor)
 
-        lbl_matricola = QLabel("Matricola:")
-        lbl_matricola.setObjectName("LblInfo")
-        self.val_matricola = QLabel("-")
-        self.val_matricola.setObjectName("ValInfo")
+        nav.addWidget(self.btn_modifica)
+        nav.addWidget(self.btn_elimina)
 
-        lbl_livello = QLabel("Livello Formativo:")
-        lbl_livello.setObjectName("LblInfo")
-        self.val_livello = QLabel("-")
-        self.val_livello.setObjectName("ValInfo")
+        layout.addLayout(nav)
 
-        lbl_stato = QLabel("Stato Attuale:")
-        lbl_stato.setObjectName("LblInfo")
-        self.val_stato = QLabel("-")
-        self.val_stato.setObjectName("ValInfo")
+        # Detail card
+        card_det = QFrame()
+        card_det.setObjectName("CardDettaglio")
+        shadow = QGraphicsDropShadowEffect()
+        shadow.setBlurRadius(25)
+        shadow.setColor(QColor(0, 0, 0, 18))
+        shadow.setOffset(0, 4)
+        card_det.setGraphicsEffect(shadow)
 
-        lbl_score = QLabel("Training Score:")
-        lbl_score.setObjectName("LblInfo")
-        self.val_score = QLabel("TODO")
-        self.val_score.setObjectName("ValInfoScore")
+        cd = QVBoxLayout(card_det)
+        cd.setContentsMargins(40, 35, 40, 40)
+        cd.setSpacing(24)
 
-        grid_info.addWidget(lbl_matricola, 0, 0)
-        grid_info.addWidget(self.val_matricola, 0, 1)
-        grid_info.addWidget(lbl_livello, 0, 2)
-        grid_info.addWidget(self.val_livello, 0, 3)
-        grid_info.addWidget(lbl_stato, 1, 0)
-        grid_info.addWidget(self.val_stato, 1, 1)
-        grid_info.addWidget(lbl_score, 1, 2)
-        grid_info.addWidget(self.val_score, 1, 3)
+        # Info boxes row
+        info_row = QHBoxLayout()
+        info_row.setSpacing(16)
+        box_mat, self.val_matricola = self._crea_info_box("Matricola", "-")
+        box_liv, self.val_livello   = self._crea_info_box("Livello", "-")
+        box_sta, self.val_stato     = self._crea_info_box("Stato", "-")
+        box_sco, self.val_score     = self._crea_info_box("Training Score", "–", accent=True)
+        for box in [box_mat, box_liv, box_sta, box_sco]:
+            info_row.addWidget(box)
+        cd.addLayout(info_row)
 
-        card_dettaglio_layout.addLayout(grid_info)
-        # -- fine info --
+        # Divider
+        sep = QFrame()
+        sep.setObjectName("Separatore")
+        sep.setFixedHeight(1)
+        cd.addWidget(sep)
 
-        lbl_titolo_tabella = QLabel("Registro delle Attività Operative (TODO)")
-        lbl_titolo_tabella.setFont(QFont("Segoe UI", 18, QFont.Weight.Bold))
-        lbl_titolo_tabella.setStyleSheet("color: #6f42c1; margin-top: 15px;")
-        card_dettaglio_layout.addWidget(lbl_titolo_tabella)
+        # Table title
+        lbl_tab = QLabel("Registro delle Attività Operative")
+        lbl_tab.setObjectName("TitoloTabella")
+        cd.addWidget(lbl_tab)
 
-        # tabella vuota : TODO riempiere dinamicamente
-        self.tabella_libretto = QTableWidget(0, 5) 
+        # Table
+        self.tabella_libretto = QTableWidget(0, 5)
         self.tabella_libretto.setObjectName("TabellaLibretto")
-        self.tabella_libretto.setHorizontalHeaderLabels(["Data", "Tipo Intervento", "Sede", "Ruolo", "Complessità"])
+        self.tabella_libretto.setHorizontalHeaderLabels(
+            ["Data", "Tipo Intervento", "Sede", "Ruolo", "Complessità"]
+        )
         self.tabella_libretto.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.Stretch)
         self.tabella_libretto.setAlternatingRowColors(True)
         self.tabella_libretto.setEditTriggers(QTableWidget.EditTrigger.NoEditTriggers)
+        self.tabella_libretto.verticalHeader().setVisible(False)
+        cd.addWidget(self.tabella_libretto)
 
-        card_dettaglio_layout.addWidget(self.tabella_libretto)
-        dettaglio_layout.addWidget(card_dettaglio)
-        
+        layout.addWidget(card_det)
         self.stacked_widget.addWidget(self.page_dettaglio)
+
+    # ─── Factory helpers ──────────────────────────────────────────────────────
+
+    def _crea_info_box(self, etichetta, valore_iniziale, accent=False):
+        """Crea un box informativo con etichetta e valore. Restituisce (QFrame, QLabel_valore)."""
+        box = QFrame()
+        box.setObjectName("InfoBox")
+        bl = QVBoxLayout(box)
+        bl.setContentsMargins(16, 12, 16, 12)
+        bl.setSpacing(6)
+        lbl = QLabel(etichetta.upper())
+        lbl.setObjectName("LblInfo")
+        val = QLabel(valore_iniziale)
+        val.setObjectName("ValInfoScore" if accent else "ValInfo")
+        val.setWordWrap(True)
+        bl.addWidget(lbl)
+        bl.addWidget(val)
+        return box, val
+
+    def crea_item_lista(self, cognome, nome, matricola, livello, stato):
+        """Restituisce (QListWidgetItem, QWidget) con card arricchita per la lista."""
+        widget = QFrame()
+        widget.setObjectName("ItemCard")
+        widget.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, True)
+
+        row = QHBoxLayout(widget)
+        row.setContentsMargins(16, 10, 16, 10)
+        row.setSpacing(14)
+
+        # Badge livello
+        bg_liv, fg_liv = _COLORI_LIVELLO.get(livello, ("#f1f5f9", "#475569"))
+        badge_liv = QLabel(livello if livello else "–")
+        badge_liv.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        badge_liv.setFixedWidth(66)
+        badge_liv.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents, True)
+        badge_liv.setStyleSheet(
+            f"background-color:{bg_liv}; color:{fg_liv}; font-weight:bold; "
+            f"font-size:11px; padding:3px 8px; border-radius:10px; "
+            f"border:1px solid {fg_liv}50;"
+        )
+
+        # Testo: nome + matricola
+        txt_col = QVBoxLayout()
+        txt_col.setSpacing(2)
+        lbl_nome = QLabel(f"{cognome} {nome}")
+        lbl_nome.setObjectName("ItemNome")
+        lbl_nome.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents, True)
+        lbl_mat = QLabel(f"Matricola: {matricola}")
+        lbl_mat.setObjectName("ItemMatricola")
+        lbl_mat.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents, True)
+        txt_col.addWidget(lbl_nome)
+        txt_col.addWidget(lbl_mat)
+
+        # Badge stato
+        bg_sta, fg_sta = _COLORI_STATO.get(stato, ("#f1f5f9", "#475569"))
+        badge_sta = QLabel(stato if stato else "–")
+        badge_sta.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        badge_sta.setFixedWidth(90)
+        badge_sta.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents, True)
+        badge_sta.setStyleSheet(
+            f"background-color:{bg_sta}; color:{fg_sta}; font-weight:bold; "
+            f"font-size:11px; padding:3px 8px; border-radius:10px; "
+            f"border:1px solid {fg_sta}50;"
+        )
+
+        row.addWidget(badge_liv)
+        row.addLayout(txt_col, stretch=1)
+        row.addWidget(badge_sta)
+
+        item = QListWidgetItem()
+        item.setSizeHint(QSize(0, 68))
+        return item, widget
+
+    def imposta_dettaglio(self, spec):
+        """Popola la pagina dettaglio con i dati dello specializzando scelto."""
+        cognome = spec.get("cognome", "").upper()
+        nome    = spec.get("nome", "")
+        livello = spec.get("livello", "N/D")
+        stato   = spec.get("stato", "N/D")
+
+        self.lbl_cognome_medico.setText(cognome)
+        self.lbl_nome_proprio_medico.setText(nome)
+        self.val_matricola.setText(spec.get("matricola", "N/D"))
+        self.val_score.setText("TODO")
+
+        # Badge livello
+        bg, fg = _COLORI_LIVELLO.get(livello, ("#f1f5f9", "#475569"))
+        self.val_livello.setText(livello)
+        self.val_livello.setStyleSheet(
+            f"background-color:{bg}; color:{fg}; font-size:18px; "
+            f"font-weight:bold; padding:10px 16px; border-radius:10px; "
+            f"border:1.5px solid {fg}60;"
+        )
+
+        # Badge stato
+        bg2, fg2 = _COLORI_STATO.get(stato, ("#f1f5f9", "#475569"))
+        self.val_stato.setText(stato)
+        self.val_stato.setStyleSheet(
+            f"background-color:{bg2}; color:{fg2}; font-size:18px; "
+            f"font-weight:bold; padding:10px 16px; border-radius:10px; "
+            f"border:1.5px solid {fg2}60;"
+        )
 
     def load_styles(self):
         style_path = os.path.join("asset", "styles", "libretto.qss")

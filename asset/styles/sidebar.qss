@@ -1,53 +1,129 @@
 /* =========================================
-   SFONDO PRINCIPALE SIDEBAR
+   SFONDO PRINCIPALE
 ========================================= */
 QWidget#SidebarMain {
-    background-color: #1e293b;
+    background-color: #0f172a;
 }
 
 /* =========================================
-   TITOLO PRINCIPALE
+   HEADER
 ========================================= */
+QWidget#SidebarHeader {
+    background-color: transparent;
+}
+
 QLabel#SidebarTitle {
-    color: #f8fafc;
-    letter-spacing: 1px;
+    font-family: "Segoe UI";
+    font-size: 22px;
+    font-weight: bold;
+    color: #f1f5f9;
+    letter-spacing: 2px;
+}
+
+QLabel#SidebarSubtitle {
+    font-family: "Segoe UI";
+    font-size: 12px;
+    color: #64748b;
+    letter-spacing: 0.5px;
 }
 
 /* =========================================
-   LISTA MENU NAVIGAZIONE
+   SEPARATORI
 ========================================= */
-QListWidget#SidebarMenu {
+QFrame#SidebarSeparator {
+    background-color: #1e293b;
+    border: none;
+}
+
+
+/* =========================================
+   ETICHETTA SEZIONE NAVIGAZIONE
+========================================= */
+QLabel#SidebarNavLabel {
+    font-family: "Segoe UI";
+    font-size: 11px;
+    font-weight: bold;
+    color: #475569;
+    letter-spacing: 2px;
+}
+
+/* =========================================
+   CONTENITORE NAV
+========================================= */
+QWidget#SidebarNav {
+    background-color: transparent;
+}
+
+/* =========================================
+   ITEM DI NAVIGAZIONE
+========================================= */
+QFrame#NavItemFrame {
     background-color: transparent;
     border: none;
-    outline: 0px;
+    /* hover e selezione gestiti inline in Python (_seleziona) */
 }
 
-QListWidget#SidebarMenu::item {
-    background-color: #334155; 
-    border: 2px solid #475569; 
-    color: #f8fafc; 
-    font-size: 20px;
+/* ─── Testi ─────────────────────────────── */
+
+QLabel#NavItemTitolo {
     font-family: "Segoe UI";
+    font-size: 16px;
     font-weight: bold;
-    padding: 20px 10px;
-    margin: 8px 10px;
-    border-radius: 12px;
+    color: #64748b;
+    background: transparent;
+    border: none;
 }
 
-QListWidget#SidebarMenu::item:hover {
-    background-color: #475569; 
-    border: 2px solid #94a3b8;
+QLabel#NavItemTitolo[selected="true"] {
+    color: #e2e8f0;
 }
 
-QListWidget#SidebarMenu::item:selected {
-    background-color: #6f42c1;
-    border: 2px solid #8b5cf6; 
-    color: #ffffff;
+QLabel#NavItemSottotitolo {
+    font-family: "Segoe UI";
+    font-size: 12px;
+    color: #334155;
+    background: transparent;
+    border: none;
+}
+
+QLabel#NavItemSottotitolo[selected="true"] {
+    color: #94a3b8;
+}
+
+/* Hover: rischiarisce i testi */
+QFrame#NavItemFrame:hover QLabel#NavItemTitolo {
+    color: #94a3b8;
+}
+
+QFrame#NavItemFrame:hover QLabel#NavItemSottotitolo {
+    color: #475569;
+}
+
+/* Selezionato */
+QFrame#NavItemFrame[selected="true"] QLabel#NavItemTitolo {
+    color: #e2e8f0;
+}
+
+QFrame#NavItemFrame[selected="true"] QLabel#NavItemSottotitolo {
+    color: #94a3b8;
 }
 
 /* =========================================
-   FOOTER SIDEBAR
+   FOOTER
 ========================================= */
-QLabel#SidebarFooter {
-    color: #64748b;
+QWidget#SidebarFooter {
+    background-color: transparent;
+}
+
+QLabel#SidebarFooterText {
+    font-family: "Segoe UI";
+    font-size: 13px;
+    font-weight: bold;
+    color: #475569;
+}
+
+QLabel#SidebarFooterVersion {
+    font-family: "Segoe UI";
+    font-size: 11px;
+    color: #334155;
 }

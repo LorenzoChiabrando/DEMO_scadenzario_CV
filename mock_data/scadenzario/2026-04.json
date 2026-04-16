@@ -1,0 +1,21 @@
+{
+    "metadata": {
+        "stato": "CONVALIDATO"
+    },
+    "turni": {
+        "2026-04-01": {
+            "Tipo Guardia": "118"
+        },
+        "2026-04-02": {
+            "Reparto I": "JAZZ B.",
+            "Reparto II": "Gasparri A.",
+            "Tipo Guardia": "PI"
+        },
+        "2026-04-03": {
+            "Tipo Guardia": "L"
+        },
+        "2026-04-06": {
+            "Tipo Guardia": "118"
+        }
+    }
+}

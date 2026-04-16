@@ -37,6 +37,7 @@ class DataManagerPazienti:
             "cognome": dati_form["cognome"],
             "codice_intervento": dati_form["codice_intervento"],
             "urgenza": dati_form["urgenza"],
+            "stato": dati_form.get("stato", "In Attesa"),
             "data_inserimento": data_odierna,
             "note": dati_form["note"]
         }
@@ -53,3 +54,28 @@ class DataManagerPazienti:
             with open(filepath, 'r', encoding='utf-8') as f:
                 return json.load(f)
         return None
+
+    def aggiorna_paziente(self, paz_id, dati):
+        filepath = os.path.join(self.dir_pazienti, f"{paz_id}.json")
+        if not os.path.exists(filepath):
+            return None
+        with open(filepath, 'r', encoding='utf-8') as f:
+            paz = json.load(f)
+        paz.update({
+            "nome": dati["nome"],
+            "cognome": dati["cognome"],
+            "codice_intervento": dati["codice_intervento"],
+            "urgenza": dati["urgenza"],
+            "stato": dati.get("stato", paz.get("stato", "In Attesa")),
+            "note": dati["note"],
+        })
+        with open(filepath, 'w', encoding='utf-8') as f:
+            json.dump(paz, f, indent=4)
+        return paz
+
+    def elimina_paziente(self, paz_id):
+        filepath = os.path.join(self.dir_pazienti, f"{paz_id}.json")
+        if os.path.exists(filepath):
+            os.remove(filepath)
+            return True
+        return False
