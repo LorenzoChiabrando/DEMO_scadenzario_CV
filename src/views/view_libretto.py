@@ -3,9 +3,9 @@ from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QFrame,
     QLineEdit, QPushButton, QGraphicsDropShadowEffect,
     QStackedWidget, QTableWidget, QHeaderView,
-    QListWidget, QListWidgetItem
+    QListWidget, QListWidgetItem, QDateEdit, QComboBox,
 )
-from PySide6.QtCore import Qt, QSize
+from PySide6.QtCore import Qt, QSize, QDate
 from PySide6.QtGui import QColor
 
 _COLORI_LIVELLO = {
@@ -232,12 +232,67 @@ class ViewLibretto(QWidget):
         sep.setFixedHeight(1)
         cd.addWidget(sep)
 
-        # Table title
+        # ── Intestazione tabella + contatore ─────────────────────────────────
+        tab_header = QHBoxLayout()
         lbl_tab = QLabel("Registro delle Attività Operative")
         lbl_tab.setObjectName("TitoloTabella")
-        cd.addWidget(lbl_tab)
+        tab_header.addWidget(lbl_tab)
+        tab_header.addStretch()
+        self.lbl_risultati_filtro = QLabel("")
+        self.lbl_risultati_filtro.setObjectName("LblRisultatiFiltro")
+        tab_header.addWidget(self.lbl_risultati_filtro)
+        cd.addLayout(tab_header)
 
-        # Table
+        # ── Barra filtri ──────────────────────────────────────────────────────
+        filtro_frame = QFrame()
+        filtro_frame.setObjectName("FiltroBar")
+        filtro_layout = QHBoxLayout(filtro_frame)
+        filtro_layout.setContentsMargins(14, 8, 14, 8)
+        filtro_layout.setSpacing(10)
+
+        lbl_da = QLabel("Dal")
+        lbl_da.setObjectName("LblFiltroData")
+        self.filtro_da = QDateEdit()
+        self.filtro_da.setObjectName("FiltroDa")
+        self.filtro_da.setCalendarPopup(True)
+        self.filtro_da.setDisplayFormat("dd/MM/yyyy")
+        self.filtro_da.setFixedHeight(34)
+        self.filtro_da.setDate(QDate(2020, 1, 1))
+
+        lbl_a = QLabel("al")
+        lbl_a.setObjectName("LblFiltroData")
+        self.filtro_a = QDateEdit()
+        self.filtro_a.setObjectName("FiltroA")
+        self.filtro_a.setCalendarPopup(True)
+        self.filtro_a.setDisplayFormat("dd/MM/yyyy")
+        self.filtro_a.setFixedHeight(34)
+        self.filtro_a.setDate(QDate.currentDate())
+
+        lbl_cpx = QLabel("Complessità")
+        lbl_cpx.setObjectName("LblFiltroData")
+        self.filtro_cpx = QComboBox()
+        self.filtro_cpx.setObjectName("FiltroCpx")
+        self.filtro_cpx.addItems(["Tutte", "Alta", "Media", "Bassa"])
+        self.filtro_cpx.setFixedHeight(34)
+
+        self.btn_azzera_filtri = QPushButton("× Azzera")
+        self.btn_azzera_filtri.setObjectName("BtnAzzeraFiltri")
+        self.btn_azzera_filtri.setFixedHeight(34)
+        self.btn_azzera_filtri.setCursor(Qt.CursorShape.PointingHandCursor)
+
+        filtro_layout.addWidget(lbl_da)
+        filtro_layout.addWidget(self.filtro_da)
+        filtro_layout.addWidget(lbl_a)
+        filtro_layout.addWidget(self.filtro_a)
+        filtro_layout.addSpacing(6)
+        filtro_layout.addWidget(lbl_cpx)
+        filtro_layout.addWidget(self.filtro_cpx)
+        filtro_layout.addSpacing(6)
+        filtro_layout.addWidget(self.btn_azzera_filtri)
+        filtro_layout.addStretch()
+        cd.addWidget(filtro_frame)
+
+        # ── Tabella ───────────────────────────────────────────────────────────
         self.tabella_libretto = QTableWidget(0, 5)
         self.tabella_libretto.setObjectName("TabellaLibretto")
         self.tabella_libretto.setHorizontalHeaderLabels(
@@ -247,6 +302,8 @@ class ViewLibretto(QWidget):
         self.tabella_libretto.setAlternatingRowColors(True)
         self.tabella_libretto.setEditTriggers(QTableWidget.EditTrigger.NoEditTriggers)
         self.tabella_libretto.verticalHeader().setVisible(False)
+        self.tabella_libretto.setMinimumHeight(180)
+        self.tabella_libretto.setMaximumHeight(420)
         cd.addWidget(self.tabella_libretto)
 
         layout.addWidget(card_det)

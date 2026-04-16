@@ -326,6 +326,91 @@ QLabel#TitoloTabella {
 }
 
 /* =========================================
+   BARRA FILTRI TABELLA ATTIVITÀ
+========================================= */
+QFrame#FiltroBar {
+    background-color: #f8fafc;
+    border: 1px solid #e2e8f0;
+    border-radius: 10px;
+}
+
+QLabel#LblFiltroData {
+    font-size: 12px;
+    font-weight: bold;
+    color: #64748b;
+}
+
+QDateEdit#FiltroDa,
+QDateEdit#FiltroA {
+    background-color: #ffffff;
+    border: 1.5px solid #e2e8f0;
+    border-radius: 7px;
+    padding: 0 8px;
+    font-size: 13px;
+    color: #1e293b;
+    min-width: 110px;
+}
+QDateEdit#FiltroDa:focus,
+QDateEdit#FiltroA:focus {
+    border-color: #818cf8;
+}
+QDateEdit#FiltroDa::drop-down,
+QDateEdit#FiltroA::drop-down {
+    border: none;
+    width: 22px;
+}
+
+QComboBox#FiltroCpx {
+    combobox-popup: 0;
+    background-color: #ffffff;
+    border: 1.5px solid #e2e8f0;
+    border-radius: 7px;
+    padding: 0 10px;
+    font-size: 13px;
+    color: #1e293b;
+    min-width: 100px;
+}
+QComboBox#FiltroCpx:focus { border-color: #818cf8; }
+QComboBox#FiltroCpx::drop-down { border: none; width: 22px; }
+QComboBox#FiltroCpx QAbstractItemView {
+    border: 1px solid #c7d2fe;
+    border-radius: 7px;
+    background-color: #ffffff;
+    outline: 0;
+}
+QComboBox#FiltroCpx QAbstractItemView::item {
+    min-height: 32px;
+    padding-left: 8px;
+    color: #1e293b;
+}
+QComboBox#FiltroCpx QAbstractItemView::item:hover,
+QComboBox#FiltroCpx QAbstractItemView::item:selected {
+    background-color: #ede9fe;
+    color: #3730a3;
+}
+
+QPushButton#BtnAzzeraFiltri {
+    background-color: #ffffff;
+    color: #64748b;
+    font-size: 12px;
+    font-weight: bold;
+    border: 1.5px solid #e2e8f0;
+    border-radius: 7px;
+    padding: 0 12px;
+}
+QPushButton#BtnAzzeraFiltri:hover {
+    background-color: #f1f5f9;
+    color: #334155;
+    border-color: #94a3b8;
+}
+
+QLabel#LblRisultatiFiltro {
+    font-size: 12px;
+    font-weight: bold;
+    color: #4338ca;
+}
+
+/* =========================================
    TABELLA ATTIVITÀ
 ========================================= */
 QTableWidget#TabellaLibretto {

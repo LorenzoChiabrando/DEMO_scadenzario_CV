@@ -244,24 +244,53 @@ class ViewPazienti(QWidget):
         cd.setContentsMargins(40, 35, 40, 40)
         cd.setSpacing(24)
 
-        # Info boxes row
+        # Info boxes row (urgenza, complessità, tipo chirurgia, stato)
         info_row = QHBoxLayout()
         info_row.setSpacing(16)
-        box_cod, self.val_codice  = self._crea_info_box("Codice Intervento", "-")
-        box_urg, self.val_urgenza = self._crea_info_box("Classe di Urgenza", "-", accent=True)
-        box_dat, self.val_data    = self._crea_info_box("Data Inserimento", "-")
-        box_sta, self.val_stato   = self._crea_info_box("Stato", "-")
-        for box in [box_cod, box_urg, box_dat, box_sta]:
+        box_urg, self.val_urgenza   = self._crea_info_box("Classe di Urgenza", "-", accent=True)
+        box_cpx, self.val_complessita = self._crea_info_box("Complessità", "-")
+        box_dat, self.val_data      = self._crea_info_box("Data Inserimento", "-")
+        box_sta, self.val_stato     = self._crea_info_box("Stato", "-")
+        for box in [box_urg, box_cpx, box_dat, box_sta]:
             info_row.addWidget(box)
         cd.addLayout(info_row)
 
         # Divider
-        sep = QFrame()
-        sep.setObjectName("Separatore")
-        sep.setFixedHeight(1)
-        cd.addWidget(sep)
+        sep1 = QFrame()
+        sep1.setObjectName("Separatore")
+        sep1.setFixedHeight(1)
+        cd.addWidget(sep1)
 
-        # Notes title
+        # ── Dettagli clinici ─────────────────────────────────────────────────
+        lbl_clinica = QLabel("Dettagli Clinici")
+        lbl_clinica.setObjectName("TitoloTabella")
+        cd.addWidget(lbl_clinica)
+
+        def _riga_clinica(etichetta):
+            row = QHBoxLayout()
+            row.setSpacing(16)
+            lbl_k = QLabel(etichetta.upper())
+            lbl_k.setObjectName("LblInfo")
+            lbl_k.setFixedWidth(180)
+            lbl_v = QLabel("—")
+            lbl_v.setObjectName("ValInfo")
+            lbl_v.setWordWrap(True)
+            row.addWidget(lbl_k)
+            row.addWidget(lbl_v, 1)
+            cd.addLayout(row)
+            return lbl_v
+
+        self.val_diagnosi   = _riga_clinica("Diagnosi")
+        self.val_intervento = _riga_clinica("Intervento")
+        self.val_tipo       = _riga_clinica("Tipo Chirurgia")
+
+        # Divider
+        sep2 = QFrame()
+        sep2.setObjectName("Separatore")
+        sep2.setFixedHeight(1)
+        cd.addWidget(sep2)
+
+        # Notes
         lbl_note = QLabel("Note Cliniche / Preparazione")
         lbl_note.setObjectName("TitoloTabella")
         cd.addWidget(lbl_note)
@@ -347,8 +376,22 @@ class ViewPazienti(QWidget):
     def imposta_dettaglio(self, paz):
         self.lbl_cognome_paziente.setText(paz.get("cognome", "").upper())
         self.lbl_nome_proprio_paziente.setText(paz.get("nome", ""))
-        self.val_codice.setText(paz.get("codice_intervento", "N/D"))
         self.val_data.setText(paz.get("data_inserimento", "N/D"))
+
+        # Complessità
+        cpx = paz.get("complessita", "")
+        _COLORI_CPX = {
+            "Alta":  ("#fee2e2", "#dc2626"),
+            "Media": ("#fef9c3", "#d97706"),
+            "Bassa": ("#dcfce7", "#15803d"),
+        }
+        self.val_complessita.setText(cpx if cpx else "—")
+        bg_c, fg_c = _COLORI_CPX.get(cpx, ("#f1f5f9", "#475569"))
+        self.val_complessita.setStyleSheet(
+            f"background-color:{bg_c}; color:{fg_c}; font-size:18px; "
+            f"font-weight:bold; padding:10px 16px; border-radius:10px; "
+            f"border:1.5px solid {fg_c}60;"
+        )
 
         urgenza = paz.get("urgenza", "")
         self.val_urgenza.setText(urgenza if urgenza else "–")
@@ -367,6 +410,22 @@ class ViewPazienti(QWidget):
             f"font-weight:bold; padding:10px 16px; border-radius:10px; "
             f"border:1.5px solid {fg2}60;"
         )
+
+        # Campi clinici
+        self.val_diagnosi.setText(paz.get("diagnosi", "") or "—")
+
+        cod = paz.get("codice_intervento", "")
+        inter = paz.get("descrizione_intervento", "")
+        if cod and inter:
+            self.val_intervento.setText(f"[{cod}]  {inter}")
+        elif inter:
+            self.val_intervento.setText(inter)
+        elif cod:
+            self.val_intervento.setText(cod)
+        else:
+            self.val_intervento.setText("—")
+
+        self.val_tipo.setText(paz.get("tipo_chirurgia", "") or "—")
 
         note = paz.get("note", "")
         self.txt_note.setText(note if note else "Nessuna nota clinica inserita.")

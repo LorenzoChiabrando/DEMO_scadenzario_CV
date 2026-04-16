@@ -1,276 +1,271 @@
 /* =========================================
-   DASHBOARD E BOTTONI NAVIGAZIONE
+   SFONDO GENERALE
 ========================================= */
 ViewSaleOperatorie {
-    background-color: #f4f6f9;
+    background-color: #f1f5f9;
 }
 
+/* =========================================
+   PAGINA SELEZIONE
+========================================= */
 QLabel#TitoloSelezione {
     font-family: "Segoe UI";
-    font-size: 32px;
+    font-size: 34px;
     font-weight: bold;
-    color: #6f42c1;
-    letter-spacing: 2px;
-}
-
-QPushButton#BtnIndietroSaleOperatorie {
-    background-color: #f8f9fa;
-    color: #495057;
-    font-weight: bold;
-    border: 2px solid #dee2e6;
-    border-radius: 8px;
-    font-size: 15px;
-}
-QPushButton#BtnIndietroSaleOperatorie:hover {
-    background-color: #e2e6ea;
-    color: #6f42c1;
-    border-color: #6f42c1;
-}
-
-QLabel#LblModalita {
-    font-family: "Arial";
-    font-size: 14px;
-    font-weight: bold;
-    color: #6c757d;
-    background-color: #e9ecef;
-    padding: 10px 15px;
-    border-radius: 8px;
-}
-
-QPushButton#BtnConvalida {
-    background-color: #198754;
-    color: white;
-    font-weight: bold;
-    border-radius: 12px;
-    font-size: 18px;
+    color: #1e1b4b;
     letter-spacing: 1px;
-    border: 2px solid #146c43;
-}
-QPushButton#BtnConvalida:hover {
-    background-color: #157347;
-    border: 2px solid #a3cfbb;
 }
 
-QPushButton#CardButton {
+QFrame#AccentBarSelezione {
+    background-color: #6f42c1;
+    border-radius: 3px;
+    border: none;
+}
+
+QLabel#SottoTitoloSelezione {
+    font-family: "Segoe UI";
+    font-size: 14px;
+    color: #64748b;
+    letter-spacing: 0.3px;
+}
+
+/* =========================================
+   CARD — BASE COMUNE
+========================================= */
+QPushButton#CardStorico,
+QPushButton#CardConsultazione,
+QPushButton#CardPianificazione {
     background-color: white;
-    border: 2px solid #e2e8f0;
+    border: 1.5px solid #e2e8f0;
     border-radius: 20px;
 }
-QPushButton#CardButton:hover {
-    border: 3px solid #6f42c1;
-    background-color: #f8f9fa;
-}
+
+/* ── Storico ── */
+QPushButton#CardStorico            { border-top: 6px solid #94a3b8; }
+QPushButton#CardStorico:hover      { border: 1.5px solid #64748b; border-top: 6px solid #475569;
+                                     background-color: #f8fafc; }
+QPushButton#CardStorico QLabel#CardTitolo  { color: #475569; }
+QPushButton#CardStorico QLabel#CardAzione  { color: #64748b; }
+QPushButton#CardStorico:hover QLabel#CardAzione { color: #334155; }
+QPushButton#CardStorico QFrame#CardSeparatore  { background-color: #e2e8f0; }
+
+/* ── Consultazione (verde, come "Corrente" nello scadenzario) ── */
+QPushButton#CardConsultazione          { border-top: 6px solid #22c55e; }
+QPushButton#CardConsultazione:hover    { border: 1.5px solid #16a34a; border-top: 6px solid #15803d;
+                                         background-color: #f0fdf4; }
+QPushButton#CardConsultazione QLabel#CardTitolo  { color: #15803d; }
+QPushButton#CardConsultazione QLabel#CardAzione  { color: #16a34a; }
+QPushButton#CardConsultazione:hover QLabel#CardAzione { color: #14532d; }
+QPushButton#CardConsultazione QFrame#CardSeparatore  { background-color: #bbf7d0; }
+
+/* ── Pianificazione (indigo) ── */
+QPushButton#CardPianificazione         { border-top: 6px solid #818cf8; }
+QPushButton#CardPianificazione:hover   { border: 1.5px solid #4f46e5; border-top: 6px solid #3730a3;
+                                         background-color: #eef2ff; }
+QPushButton#CardPianificazione QLabel#CardTitolo  { color: #3730a3; }
+QPushButton#CardPianificazione QLabel#CardAzione  { color: #6366f1; }
+QPushButton#CardPianificazione:hover QLabel#CardAzione { color: #3730a3; }
+QPushButton#CardPianificazione QFrame#CardSeparatore  { background-color: #c7d2fe; }
 
 QLabel#CardTitolo {
     font-family: "Segoe UI";
-    font-size: 24px;
+    font-size: 21px;
     font-weight: bold;
-    color: #2b3035;
+}
+QLabel#CardDescrizione {
+    color: #64748b;
+    font-size: 13px;
+}
+QLabel#CardAzione {
+    font-family: "Segoe UI";
+    font-size: 12px;
+    font-weight: bold;
+    letter-spacing: 0.5px;
 }
 
-QLabel#CardDescrizione {
-    color: #6c757d;
-    font-size: 16px;
-    margin-top: 5px;
+/* =========================================
+   BARRA NAVIGAZIONE
+========================================= */
+QPushButton#BtnIndietroSaleOperatorie {
+    background-color: #ffffff;
+    color: #475057;
+    font-weight: bold;
+    border: 1.5px solid #cbd5e1;
+    border-radius: 8px;
+    font-size: 13px;
+}
+QPushButton#BtnIndietroSaleOperatorie:hover {
+    background-color: #f1f5f9;
+    color: #6f42c1;
+    border-color: #a78bfa;
 }
 
 QPushButton#btnNav {
-    background-color: #e9ecef;
-    color: #495057;
+    background-color: #e2e8f0;
+    color: #334155;
     font-weight: bold;
-    font-size: 24px;
-    border-radius: 25px;
+    font-size: 20px;
+    border-radius: 23px;
     border: none;
 }
 QPushButton#btnNav:hover {
-    background-color: #0d6efd;
+    background-color: #6f42c1;
     color: white;
 }
 
 QPushButton#btnMeseAnno {
-    font-family: "Segoe UI", Arial, sans-serif;
-    font-size: 40px;
+    font-family: "Segoe UI", sans-serif;
+    font-size: 26px;
     font-weight: bold;
-    color: #1f2937;
+    color: #1e293b;
     background-color: transparent;
     border: none;
-    padding: 5px 25px;
-    border-radius: 12px;
+    padding: 4px 20px;
+    border-radius: 10px;
 }
-QPushButton#btnMeseAnno:hover {
-    color: #0d6efd;
-    background-color: #e2e8f0;
+QPushButton#btnMeseAnno:disabled {
+    color: #1e293b;
+    background-color: transparent;
 }
 
 /* =========================================
-   SCROLLBAR (Orizzontale e Verticale)
+   BOTTONE PIANIFICA
+========================================= */
+QPushButton#BtnPianifica {
+    background-color: #4f46e5;
+    color: white;
+    font-weight: bold;
+    font-size: 14px;
+    border-radius: 10px;
+    border: none;
+    padding: 0px 20px;
+    letter-spacing: 0.5px;
+}
+QPushButton#BtnPianifica:hover {
+    background-color: #4338ca;
+}
+QPushButton#BtnPianifica:pressed {
+    background-color: #3730a3;
+}
+
+/* =========================================
+   BOTTONE PULISCI
+========================================= */
+QPushButton#BtnPulisci {
+    background-color: #ffffff;
+    color: #dc2626;
+    font-weight: bold;
+    font-size: 13px;
+    border-radius: 8px;
+    border: 1.5px solid #fca5a5;
+    padding: 0px 20px;
+    letter-spacing: 0.5px;
+}
+QPushButton#BtnPulisci:hover {
+    background-color: #fef2f2;
+    border-color: #dc2626;
+}
+QPushButton#BtnPulisci:pressed {
+    background-color: #fee2e2;
+}
+
+/* =========================================
+   BOTTONE CONVALIDA
+========================================= */
+QPushButton#BtnConvalida {
+    background-color: #16a34a;
+    color: white;
+    font-weight: bold;
+    border-radius: 10px;
+    font-size: 16px;
+    letter-spacing: 1px;
+    border: none;
+}
+QPushButton#BtnConvalida:hover {
+    background-color: #15803d;
+}
+
+/* =========================================
+   LABEL MODALITÀ / STATO
+========================================= */
+QLabel#LblModalita,
+QLabel#LblStato {
+    font-family: "Segoe UI";
+    font-size: 12px;
+    font-weight: bold;
+    border-radius: 8px;
+    padding: 5px 10px;
+}
+
+/* =========================================
+   SCROLLBAR
 ========================================= */
 QScrollBar:horizontal {
-    border: none;
-    background: #f4f6f9;
-    height: 12px;
-    margin: 0px 0px 0px 0px;
-    border-radius: 6px;
+    border: none; background: #e2e8f0;
+    height: 8px; border-radius: 4px;
 }
 QScrollBar::handle:horizontal {
-    background: #adb5bd;
-    min-width: 30px;
-    border-radius: 6px;
+    background: #94a3b8; min-width: 30px; border-radius: 4px;
 }
-QScrollBar::handle:horizontal:hover {
-    background: #6c757d;
-}
-QScrollBar::add-line:horizontal, QScrollBar::sub-line:horizontal {
-    border: none;
-    background: none;
-    width: 0px;
-}
+QScrollBar::handle:horizontal:hover { background: #475569; }
+QScrollBar::add-line:horizontal, QScrollBar::sub-line:horizontal
+    { border: none; background: none; width: 0; }
 
 QScrollBar:vertical {
-    border: none;
-    background: #f4f6f9;
-    width: 12px;
-    margin: 0px 0px 0px 0px;
-    border-radius: 6px;
+    border: none; background: #e2e8f0;
+    width: 8px; border-radius: 4px;
 }
 QScrollBar::handle:vertical {
-    background: #adb5bd;
-    min-height: 30px;
-    border-radius: 6px;
+    background: #94a3b8; min-height: 30px; border-radius: 4px;
 }
-QScrollBar::handle:vertical:hover {
-    background: #6c757d;
-}
-QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical {
-    border: none;
-    background: none;
-    height: 0px;
-}
+QScrollBar::handle:vertical:hover { background: #475569; }
+QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical
+    { border: none; background: none; height: 0; }
 
 /* =========================================
-   TABELLA CALENDARIO
+   TABELLA
 ========================================= */
 QTableWidget {
-    background-color: white;
-    alternate-background-color: #f8f9fa;
-    gridline-color: #dee2e6;
-    border: 1px solid #dee2e6;
-    border-radius: 8px;
-    font-size: 15px;
-    color: #212529;
-    outline: 0px;
+    background-color: #ffffff;
+    gridline-color: #e2e8f0;
+    border: 1px solid #cbd5e1;
+    border-radius: 10px;
+    font-size: 10px;
+    color: #1e293b;
+    outline: 0;
 }
-QTableWidget::item {
-    padding: 5px;
-}
-
+QTableWidget::item { padding: 6px 8px; }
 QTableWidget::item:selected {
-    background-color: #f3e8ff;
+    background-color: #ede9fe;
     color: #4c1d95;
 }
 
 QHeaderView::section:horizontal {
     background-color: #e2e8f0;
-    color: #1e293b;
-    font-weight: bold;
-    font-size: 18px;
-    border: 1px solid #cbd5e1;
-    padding: 10px;
-}
-
-QHeaderView::section:vertical {
-    background-color: #f1f5f9;
     color: #334155;
     font-weight: bold;
     font-size: 14px;
-    border: 1px solid #cbd5e1;
-    padding: 5px 15px;
+    border: none;
+    border-right: 1px solid #cbd5e1;
+    border-bottom: 1px solid #cbd5e1;
+    padding: 8px 4px;
+}
+
+QHeaderView::section:vertical {
+    background-color: #f8fafc;
+    color: #334155;
+    font-weight: bold;
+    font-size: 12px;
+    border: none;
+    border-right: 1px solid #cbd5e1;
+    border-bottom: 1px solid #cbd5e1;
+    padding: 4px 10px;
+    min-width: 120px;
 }
 
 QTableCornerButton::section {
-    background-color: #cbd5e1;
-    border: 1px solid #cbd5e1;
-}
-
-/* =========================================
-   MENU A TENDINA E SPUNTE (QComboBox)
-========================================= */
-QComboBox {
-    combobox-popup: 0;
-    background-color: #ffffff;
-    border: 2px solid transparent;
-    border-radius: 6px;
-    padding: 2px 8px;
-    font-size: 15px;
-    color: #1e293b;
-    font-weight: bold;
-}
-QComboBox:hover, QComboBox:focus {
-    border: 2px solid #6f42c1;
-    background-color: #ffffff;
-}
-QComboBox::drop-down {
+    background-color: #e2e8f0;
     border: none;
-    width: 25px;
-}
-QComboBox::down-arrow {
-    image: url(data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIxNiIgaGVpZ2h0PSIxNiIgdmlld0JveD0iMCAwIDI0IDI0IiBmaWxsPSJub25lIiBzdHJva2U9IiM2NDc0OGIiIHN0cm9rZS13aWR0aD0iMiIgc3Ryb2tlLWxpbmVjYXA9InJvdW5kIiBzdHJva2UtbGluZWpvaW49InJvdW5kIj48cG9seWxpbmUgcG9pbnRzPSI2IDkgMTIgMTUgMTggOSI+PC9wb2x5bGluZT48L3N2Zz4=);
-}
-
-/* =========================================
-   LISTA ESPANSA E RIGHE
-========================================= */
-QComboBox QAbstractItemView {
-    border: 1px solid #cbd5e1;
-    border-radius: 8px;
-    background-color: #ffffff;
-    outline: 0px;
-    padding: 4px;
-}
-
-QComboBox QAbstractItemView::item {
-    min-height: 35px;
-    border-radius: 4px;
-    color: #1e293b;
-    background-color: transparent;
-}
-
-QComboBox QAbstractItemView::item:hover {
-    background-color: #f3e8ff;
-    color: #4c1d95;
-}
-
-QComboBox QAbstractItemView::item:selected {
-    background-color: #6f42c1;
-    color: #ffffff;
-}
-
-/* =========================================
-   SCROLLBAR SPECIFICA PER IL MENU A TENDINA
-========================================= */
-QComboBox QAbstractItemView QScrollBar:vertical {
-    border: none;
-    background: #f1f5f9;
-    width: 14px;
-    margin: 2px;
-    border-radius: 6px;
-}
-QComboBox QAbstractItemView QScrollBar::handle:vertical {
-    background: #94a3b8;
-    min-height: 25px;
-    border-radius: 5px;
-}
-QComboBox QAbstractItemView QScrollBar::handle:vertical:hover {
-    background: #6f42c1;
-}
-QComboBox QAbstractItemView QScrollBar::add-line:vertical,
-QComboBox QAbstractItemView QScrollBar::sub-line:vertical {
-    height: 0px;
-    background: none;
-}
-
-QComboBox::indicator:checked {
-    background-color: #6f42c1;
-    border: 1px solid #6f42c1;
-    image: url(data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAyNCAyNCIgZmlsbD0ibm9uZSIgc3Ryb2tlPSJ3aGl0ZSIgc3Ryb2tlLXdpZHRoPSI0IiBzdHJva2UtbGluZWNhcD0icm91bmQiIHN0cm9rZS1saW5lam9pbj0icm91bmQiPjxwb2x5bGluZSBwb2ludHM9IjIwIDYgOSAxNyA0IDEyIj48L3BvbHlsaW5lPjwvc3ZnPg==);
+    border-right: 1px solid #cbd5e1;
+    border-bottom: 1px solid #cbd5e1;
 }

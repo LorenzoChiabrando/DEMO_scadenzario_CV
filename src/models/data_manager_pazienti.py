@@ -35,11 +35,15 @@ class DataManagerPazienti:
             "id": nuovo_id,
             "nome": dati_form["nome"],
             "cognome": dati_form["cognome"],
-            "codice_intervento": dati_form["codice_intervento"],
+            "diagnosi": dati_form.get("diagnosi", ""),
+            "codice_intervento": dati_form.get("codice_intervento", ""),
+            "descrizione_intervento": dati_form.get("descrizione_intervento", ""),
+            "tipo_chirurgia": dati_form.get("tipo_chirurgia", ""),
+            "complessita": dati_form.get("complessita", ""),
             "urgenza": dati_form["urgenza"],
             "stato": dati_form.get("stato", "In Attesa"),
             "data_inserimento": data_odierna,
-            "note": dati_form["note"]
+            "note": dati_form.get("note", ""),
         }
 
         filepath = os.path.join(self.dir_pazienti, f"{nuovo_id}.json")
@@ -47,6 +51,22 @@ class DataManagerPazienti:
             json.dump(nuovo_paziente, f, indent=4)
             
         return nuovo_paziente
+
+    def get_pazienti_in_attesa(self):
+        """
+        Restituisce i pazienti con stato 'In Attesa', ordinati per urgenza
+        (Alta → Media → Bassa) e poi per cognome.
+        """
+        ordine_urgenza = {"Alta": 0, "Media": 1, "Bassa": 2}
+        pazienti = [
+            p for p in self.get_tutti_pazienti()
+            if p.get("stato") == "In Attesa"
+        ]
+        pazienti.sort(key=lambda p: (
+            ordine_urgenza.get(p.get("urgenza", "Bassa"), 2),
+            p.get("cognome", ""),
+        ))
+        return pazienti
 
     def get_paziente_by_id(self, paziente_id):
         filepath = os.path.join(self.dir_pazienti, f"{paziente_id}.json")
@@ -64,10 +84,14 @@ class DataManagerPazienti:
         paz.update({
             "nome": dati["nome"],
             "cognome": dati["cognome"],
-            "codice_intervento": dati["codice_intervento"],
+            "diagnosi": dati.get("diagnosi", paz.get("diagnosi", "")),
+            "codice_intervento": dati.get("codice_intervento", paz.get("codice_intervento", "")),
+            "descrizione_intervento": dati.get("descrizione_intervento", paz.get("descrizione_intervento", "")),
+            "tipo_chirurgia": dati.get("tipo_chirurgia", paz.get("tipo_chirurgia", "")),
+            "complessita": dati.get("complessita", paz.get("complessita", "")),
             "urgenza": dati["urgenza"],
             "stato": dati.get("stato", paz.get("stato", "In Attesa")),
-            "note": dati["note"],
+            "note": dati.get("note", paz.get("note", "")),
         })
         with open(filepath, 'w', encoding='utf-8') as f:
             json.dump(paz, f, indent=4)

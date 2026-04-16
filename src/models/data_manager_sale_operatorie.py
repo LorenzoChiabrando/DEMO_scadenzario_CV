@@ -1,5 +1,6 @@
 import json
 import os
+import datetime as dt
 from datetime import datetime
 
 
@@ -84,23 +85,27 @@ class DataManagerSaleOperatorie:
         return f"{or1}\n{or2}".strip()
 
     def get_slot(self, data_str, nome_riga):
+        """Ritorna stringa formattata su due righe: 'Nome\nPZ0001 · 38.12' per la cella."""
+        slot = self.get_slot_raw(data_str, nome_riga)
+        if not slot:
+            return ""
+        if isinstance(slot, str):
+            return slot
+        nome_paz = slot.get("nome_paziente", "")
+        if not nome_paz:
+            return ""
+        id_paz = slot.get("id_paziente", "")
+        codice = slot.get("codice_intervento", "")
+        seconda_riga = " · ".join(filter(None, [id_paz, codice]))
+        return f"{nome_paz}\n{seconda_riga}" if seconda_riga else nome_paz
+
+    def get_slot_raw(self, data_str, slot_label):
+        """Ritorna il dict grezzo dello slot (nome_paziente, id_paziente, diagnosi, ...)."""
         anno = int(data_str[:4])
         mese = int(data_str[5:7])
         data = self.load_mese(anno, mese)
-
         turno = data["turni"].get(data_str, {})
-
-        slot = turno.get(nome_riga, {})
-
-        if not slot:
-            return ""
-
-        paziente = slot.get("nome_paziente", "")
-        diagnosi = slot.get("diagnosi", "")
-        intervento = slot.get("intervento", "")
-        chirurgo = slot.get("chirurgo", "")
-
-        return f"{paziente} Dia: {diagnosi}\nInt: {intervento} {chirurgo}".strip()
+        return turno.get(slot_label, {})
 
     def set_valore_cella(self, data_str, nome_riga, valore):
         anno = int(data_str[:4])
@@ -112,6 +117,81 @@ class DataManagerSaleOperatorie:
 
         data["turni"][data_str][nome_riga] = valore
         self.save_mese(anno, mese, data)
+
+    def set_specializzandi(self, data_str, or1, or2):
+        """Scrive i due specializzandi assegnati alla sala operatoria per un giorno."""
+        anno = int(data_str[:4])
+        mese = int(data_str[5:7])
+        data = self.load_mese(anno, mese)
+
+        if data_str not in data["turni"]:
+            data["turni"][data_str] = {}
+
+        data["turni"][data_str]["specializzandi"] = {"OR I": or1, "OR II": or2}
+        self.save_mese(anno, mese, data)
+
+    def get_stato_settimana(self, lun_date):
+        """
+        Restituisce lo stato della settimana che inizia il lunedì indicato.
+        Lo stato è salvato in metadata.settimane[lun_str] del file mensile.
+        """
+        lun_str = lun_date.strftime("%Y-%m-%d")
+        data = self.load_mese(lun_date.year, lun_date.month)
+        settimane = data.get("metadata", {}).get("settimane", {})
+        return settimane.get(lun_str, "BOZZA")
+
+    def set_stato_settimana(self, lun_date, stato):
+        """Scrive lo stato (BOZZA / CONVALIDATO) per la settimana indicata."""
+        lun_str = lun_date.strftime("%Y-%m-%d")
+        anno, mese = lun_date.year, lun_date.month
+        data = self.load_mese(anno, mese)
+        if "settimane" not in data["metadata"]:
+            data["metadata"]["settimane"] = {}
+        data["metadata"]["settimane"][lun_str] = stato
+        self.save_mese(anno, mese, data)
+
+    def set_slot_data(self, data_str, slot_label, slot_dict):
+        """
+        Scrive un dict strutturato per uno slot orario.
+        slot_dict ha chiavi: nome_paziente, diagnosi, intervento, chirurgo.
+        """
+        anno = int(data_str[:4])
+        mese = int(data_str[5:7])
+        data = self.load_mese(anno, mese)
+        if data_str not in data["turni"]:
+            data["turni"][data_str] = {}
+        data["turni"][data_str][slot_label] = slot_dict
+        self.save_mese(anno, mese, data)
+
+    def get_settimane_convalidate(self):
+        """
+        Scansiona tutti i file mensili e restituisce una lista ordinata di
+        datetime.date (i lunedì) per cui lo stato è 'CONVALIDATO'.
+        """
+        convalidate = []
+        if not os.path.exists(self.dir_sale_operatorie):
+            return convalidate
+
+        for filename in os.listdir(self.dir_sale_operatorie):
+            if not (filename.endswith(".json") and len(filename) == 12):
+                continue
+            try:
+                anno = int(filename[0:4])
+                mese = int(filename[5:7])
+            except ValueError:
+                continue
+
+            data = self.load_mese(anno, mese)
+            settimane = data.get("metadata", {}).get("settimane", {})
+            for lun_str, stato in settimane.items():
+                if stato == "CONVALIDATO":
+                    try:
+                        lun_date = dt.date.fromisoformat(lun_str)
+                        convalidate.append(lun_date)
+                    except ValueError:
+                        pass
+
+        return sorted(convalidate)
 
     def get_mesi_disponibili(self):
         """Ritorna una lista di tuple (anno, mese) analizzando i file salvati."""

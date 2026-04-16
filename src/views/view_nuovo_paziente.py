@@ -12,7 +12,7 @@ class DialogNuovoPaziente(QDialog):
         self._paz_dati = paziente_dati
         self._edit_mode = paziente_dati is not None
         self.setWindowTitle("Modifica Paziente" if self._edit_mode else "Nuovo Paziente")
-        self.setMinimumWidth(500)
+        self.setMinimumWidth(520)
         self.setSizeGripEnabled(False)
         self.setup_ui()
         if self._edit_mode:
@@ -22,7 +22,7 @@ class DialogNuovoPaziente(QDialog):
     def setup_ui(self):
         layout = QVBoxLayout(self)
         layout.setContentsMargins(30, 30, 30, 30)
-        layout.setSpacing(16)
+        layout.setSpacing(14)
 
         # Titolo
         lbl_titolo = QLabel("Modifica Paziente" if self._edit_mode else "Aggiungi Paziente")
@@ -43,14 +43,63 @@ class DialogNuovoPaziente(QDialog):
         sep.setFixedHeight(1)
         layout.addWidget(sep)
 
-        # Campi
-        layout.addWidget(self._campo("NOME", "input_nome", "Es. Mario"))
-        layout.addWidget(self._campo("COGNOME", "input_cognome", "Es. Rossi"))
-        layout.addWidget(self._campo("CODICE INTERVENTO", "input_codice", "Es. 38.12 TEA carotidea"))
+        # ── Anagrafica ────────────────────────────────────────────────────────
+        nome_cogn = QHBoxLayout()
+        nome_cogn.setSpacing(12)
+        nome_cogn.addWidget(self._campo("NOME", "input_nome", "Es. Giovanni"))
+        nome_cogn.addWidget(self._campo("COGNOME", "input_cognome", "Es. Ferretti"))
+        layout.addLayout(nome_cogn)
 
-        # Combo urgenza + stato (riga affiancata)
-        urg_stato_row = QHBoxLayout()
-        urg_stato_row.setSpacing(16)
+        # ── Dati clinici ──────────────────────────────────────────────────────
+        layout.addWidget(self._campo(
+            "DIAGNOSI", "input_diagnosi",
+            "Es. Stenosi carotidea sintomatica bilaterale"
+        ))
+
+        diag_int = QHBoxLayout()
+        diag_int.setSpacing(12)
+        diag_int.addWidget(self._campo(
+            "CODICE INTERVENTO (ICD-9)", "input_codice", "Es. 38.12"
+        ))
+        diag_int.addWidget(self._campo(
+            "DESCRIZIONE INTERVENTO", "input_intervento",
+            "Es. Endoarterectomia carotidea"
+        ))
+        layout.addLayout(diag_int)
+
+        # ── Tipo chirurgia + Complessità ──────────────────────────────────────
+        tipo_cpx = QHBoxLayout()
+        tipo_cpx.setSpacing(12)
+
+        grp_tipo = QVBoxLayout()
+        grp_tipo.setSpacing(4)
+        lbl_tipo = QLabel("TIPO CHIRURGIA")
+        lbl_tipo.setObjectName("LblCampo")
+        self.combo_tipo = QComboBox()
+        self.combo_tipo.setObjectName("ComboDialog")
+        self.combo_tipo.addItems(["Aperta", "Endovascolare"])
+        self.combo_tipo.setFixedHeight(44)
+        grp_tipo.addWidget(lbl_tipo)
+        grp_tipo.addWidget(self.combo_tipo)
+
+        grp_cpx = QVBoxLayout()
+        grp_cpx.setSpacing(4)
+        lbl_cpx = QLabel("COMPLESSITÀ")
+        lbl_cpx.setObjectName("LblCampo")
+        self.combo_complessita = QComboBox()
+        self.combo_complessita.setObjectName("ComboDialog")
+        self.combo_complessita.addItems(["Alta", "Media", "Bassa"])
+        self.combo_complessita.setFixedHeight(44)
+        grp_cpx.addWidget(lbl_cpx)
+        grp_cpx.addWidget(self.combo_complessita)
+
+        tipo_cpx.addLayout(grp_tipo)
+        tipo_cpx.addLayout(grp_cpx)
+        layout.addLayout(tipo_cpx)
+
+        # ── Urgenza + Stato ───────────────────────────────────────────────────
+        urg_stato = QHBoxLayout()
+        urg_stato.setSpacing(12)
 
         grp_urg = QVBoxLayout()
         grp_urg.setSpacing(4)
@@ -74,24 +123,24 @@ class DialogNuovoPaziente(QDialog):
         grp_sta.addWidget(lbl_sta)
         grp_sta.addWidget(self.combo_stato)
 
-        urg_stato_row.addLayout(grp_urg)
-        urg_stato_row.addLayout(grp_sta)
-        layout.addLayout(urg_stato_row)
+        urg_stato.addLayout(grp_urg)
+        urg_stato.addLayout(grp_sta)
+        layout.addLayout(urg_stato)
 
-        # Note
+        # ── Note ──────────────────────────────────────────────────────────────
         grp_note = QVBoxLayout()
         grp_note.setSpacing(4)
         lbl_note = QLabel("NOTE CLINICHE (opzionale)")
         lbl_note.setObjectName("LblCampo")
         self.input_note = QTextEdit()
         self.input_note.setObjectName("NoteDialog")
-        self.input_note.setPlaceholderText("Preparazione, allergie, note operative...")
-        self.input_note.setFixedHeight(90)
+        self.input_note.setPlaceholderText("Preparazione, allergie, controindicazioni, urgenze...")
+        self.input_note.setFixedHeight(72)
         grp_note.addWidget(lbl_note)
         grp_note.addWidget(self.input_note)
         layout.addLayout(grp_note)
 
-        # Bottoni
+        # ── Bottoni ───────────────────────────────────────────────────────────
         btn_layout = QHBoxLayout()
         btn_layout.setSpacing(12)
 
@@ -132,23 +181,30 @@ class DialogNuovoPaziente(QDialog):
     def _precompila(self):
         self.input_nome.setText(self._paz_dati.get("nome", ""))
         self.input_cognome.setText(self._paz_dati.get("cognome", ""))
+        self.input_diagnosi.setText(self._paz_dati.get("diagnosi", ""))
         self.input_codice.setText(self._paz_dati.get("codice_intervento", ""))
-        idx = self.combo_urgenza.findText(self._paz_dati.get("urgenza", ""))
-        if idx >= 0:
-            self.combo_urgenza.setCurrentIndex(idx)
-        idx2 = self.combo_stato.findText(self._paz_dati.get("stato", "In Attesa"))
-        if idx2 >= 0:
-            self.combo_stato.setCurrentIndex(idx2)
+        self.input_intervento.setText(self._paz_dati.get("descrizione_intervento", ""))
+
+        for combo, field in [
+            (self.combo_tipo, "tipo_chirurgia"),
+            (self.combo_complessita, "complessita"),
+            (self.combo_urgenza, "urgenza"),
+            (self.combo_stato, "stato"),
+        ]:
+            idx = combo.findText(self._paz_dati.get(field, ""))
+            if idx >= 0:
+                combo.setCurrentIndex(idx)
+
         self.input_note.setPlainText(self._paz_dati.get("note", ""))
 
     def _valida_e_salva(self):
         nome = self.input_nome.text().strip()
         cognome = self.input_cognome.text().strip()
-        codice = self.input_codice.text().strip()
-        if not nome or not cognome or not codice:
+        diagnosi = self.input_diagnosi.text().strip()
+        if not nome or not cognome or not diagnosi:
             QMessageBox.warning(
                 self, "Campi Incompleti",
-                "Nome, Cognome e Codice Intervento sono obbligatori."
+                "Nome, Cognome e Diagnosi sono obbligatori."
             )
             return
         self.accept()
@@ -157,7 +213,11 @@ class DialogNuovoPaziente(QDialog):
         return {
             "nome": self.input_nome.text().strip(),
             "cognome": self.input_cognome.text().strip(),
+            "diagnosi": self.input_diagnosi.text().strip(),
             "codice_intervento": self.input_codice.text().strip(),
+            "descrizione_intervento": self.input_intervento.text().strip(),
+            "tipo_chirurgia": self.combo_tipo.currentText(),
+            "complessita": self.combo_complessita.currentText(),
             "urgenza": self.combo_urgenza.currentText(),
             "stato": self.combo_stato.currentText(),
             "note": self.input_note.toPlainText().strip(),

@@ -90,6 +90,19 @@ class DataManager:
         data["turni"][data_str][nome_riga] = valore
         self.save_mese(anno, mese, data)
         
+    def get_giro_visite_settimana(self, lun_str: str, anno: int, mese: int) -> str:
+        """Restituisce lo specializzando assegnato al Giro Visite per la settimana (chiave = lunedì ISO)."""
+        data = self.load_mese(anno, mese)
+        return data.get("giro_visite", {}).get(lun_str, "")
+
+    def set_giro_visite_settimana(self, lun_str: str, anno: int, mese: int, valore: str):
+        """Salva lo specializzando al Giro Visite per la settimana indicata."""
+        data = self.load_mese(anno, mese)
+        if "giro_visite" not in data:
+            data["giro_visite"] = {}
+        data["giro_visite"][lun_str] = valore
+        self.save_mese(anno, mese, data)
+
     def get_mesi_disponibili(self):
         """Ritorna una lista di tuple (anno, mese) analizzando i file salvati."""
         disponibili = []

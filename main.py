@@ -53,25 +53,43 @@ class MainWindow(QMainWindow):
 
         self.init_pages()
 
-        self.sidebar.currentRowChanged.connect(self.body_stack.setCurrentIndex)
+        self.sidebar.currentRowChanged.connect(self._cambia_sezione)
         self.sidebar.setCurrentRow(0)
+
+    def _cambia_sezione(self, nuovo_idx):
+        """Resetta la sezione corrente alla sua pagina iniziale prima di cambiarla."""
+        vecchio_view = self.body_stack.currentWidget()
+        if hasattr(vecchio_view, 'stacked_widget'):
+            vecchio_view.stacked_widget.setCurrentIndex(0)
+        self.body_stack.setCurrentIndex(nuovo_idx)
 
     def init_pages(self):
         self.data_manager = DataManager()
-        self.view_scad = ViewScadenzario()
-        self.controller_scad = ControllerScadenzario(self.view_scad, self.data_manager)
-
         self.data_manager_libretto = DataManagerLibretto()
+        self.data_manager_pazienti = DataManagerPazienti()
+        self.data_manager_sale_operatorie = DataManagerSaleOperatorie()
+
+        self.view_scad = ViewScadenzario()
+        self.controller_scad = ControllerScadenzario(
+            self.view_scad,
+            self.data_manager,
+            model_sale_operatorie=self.data_manager_sale_operatorie,
+        )
+
         self.view_libretto = ViewLibretto()
         self.controller_libretto = ControllerLibretto(self.view_libretto, self.data_manager_libretto)
 
-        self.data_manager_pazienti = DataManagerPazienti()
         self.view_pazienti = ViewPazienti()
         self.controller_pazienti = ControllerPazienti(self.view_pazienti, self.data_manager_pazienti)
 
-        self.data_manager_sale_operatorie = DataManagerSaleOperatorie()
         self.view_sale_operatorie = ViewSaleOperatorie()
-        self.controller_sale_operatorie = ControllerSaleOperatorie(self.view_sale_operatorie, self.data_manager_sale_operatorie)
+        self.controller_sale_operatorie = ControllerSaleOperatorie(
+            self.view_sale_operatorie,
+            self.data_manager_sale_operatorie,
+            model_scadenzario=self.data_manager,
+            model_pazienti=self.data_manager_pazienti,
+            model_libretto=self.data_manager_libretto,
+        )
 
         self.body_stack.addWidget(self.view_scad)
         self.body_stack.addWidget(self.view_sale_operatorie)
