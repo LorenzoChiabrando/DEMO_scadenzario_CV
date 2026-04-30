@@ -1,0 +1,9 @@
+nome,cognome,diagnosi,codice_intervento,descrizione_intervento,tipo_chirurgia,complessita,urgenza
+Pietro,Mancini,Aneurisma aorta toracica discendente,38.45,TEVAR endoprotesi toracica,Endovascolare,Alta,Alta
+Valeria,Fontana,Occlusione arteria femorale superficiale destra,39.29,Bypass femoro-tibiale posteriore,Aperta,Alta,Alta
+Giorgio,Caruso,Stenosi carotidea bilaterale sintomatica,38.12,Endoarterectomia carotidea bilaterale,Aperta,Alta,Media
+Anna,Pellegrini,Arteriopatia obliterante stadio III Leriche,39.25,Bypass aorto-bifemorale,Aperta,Alta,Media
+Stefano,Gallo,Aneurisma iliaco comune sinistro,38.44,EVAR con estensione iliaca,Endovascolare,Media,Media
+Laura,Vitale,Insufficienza venosa cronica stadio C4,38.59,Safenectomia laser endovenosa,Endovascolare,Bassa,Bassa
+Massimo,Serra,Trombosi arteria poplitea sinistra,38.06,Trombectomia poplitea con patch,Aperta,Media,Alta
+Paola,Riva,Fistola arterovenosa dialisi non funzionante,39.42,Revisione FAV brachiocefalica,Aperta,Bassa,Media

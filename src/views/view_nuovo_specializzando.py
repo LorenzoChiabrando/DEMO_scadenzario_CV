@@ -29,7 +29,6 @@ class DialogNuovoSpecializzando(QDialog):
         layout.setContentsMargins(35, 35, 35, 35)
         layout.setSpacing(0)
 
-        # Titolo
         titolo_text = "Modifica Specializzando" if self._edit_mode else "Nuovo Specializzando"
         lbl_titolo = QLabel(titolo_text)
         lbl_titolo.setObjectName("TitoloDialog")
@@ -45,7 +44,6 @@ class DialogNuovoSpecializzando(QDialog):
         lbl_sub.setWordWrap(True)
         layout.addWidget(lbl_sub)
 
-        # Separatore
         sep = QFrame()
         sep.setObjectName("SeparatoreDialog")
         sep.setFixedHeight(1)
@@ -53,7 +51,6 @@ class DialogNuovoSpecializzando(QDialog):
         layout.addWidget(sep)
         layout.addSpacing(18)
 
-        # Campi del form
         _campi = [
             ("Matricola *",       "input_matricola", False, None),
             ("Nome *",            "input_nome",      False, None),
@@ -84,7 +81,6 @@ class DialogNuovoSpecializzando(QDialog):
 
         layout.addSpacing(8)
 
-        # Bottoni
         btn_row = QHBoxLayout()
         btn_row.setSpacing(14)
 
