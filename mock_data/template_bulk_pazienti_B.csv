@@ -1,0 +1,9 @@
+nome,cognome,diagnosi,codice_intervento,descrizione_intervento,tipo_chirurgia,complessita,urgenza
+Enrico,Bruno,Dissezione aortica tipo A operata complicata,38.45,Reintervento su dissezione residua tipo B,Endovascolare,Alta,Alta
+Carmela,Russo,Aneurisma popliteo bilaterale,38.59,Escissione aneurisma popliteo con bypass,Aperta,Media,Media
+Fabio,De Santis,Ischemia acuta arto inferiore sinistro,38.06,Embolectomia con catetere di Fogarty,Aperta,Alta,Alta
+Monica,Fiore,Varici recidive post-safenectomia,38.59,Flebectomia ambulatoriale con scleroterapia,Aperta,Bassa,Bassa
+Claudio,Amato,Stenosi arteria succlavia sinistra sintomatica,38.12,Angioplastica succlavia con stent,Endovascolare,Media,Media
+Teresa,Costa,Linfedema secondario arto superiore destro,40.9,Linfadenectomia decompressiva,Aperta,Bassa,Bassa
+Alessandro,Marini,Aneurisma anastomotico post-bypass aorto-femorale,38.44,Revisione anastomosi con patch,Aperta,Alta,Alta
+Roberta,Ferrara,Sindrome da intrappolamento arteria poplitea,39.29,Release muscolare e bypass corto,Aperta,Media,Media

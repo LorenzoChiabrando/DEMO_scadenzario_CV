@@ -57,11 +57,18 @@ class MainWindow(QMainWindow):
         self.sidebar.setCurrentRow(0)
 
     def _cambia_sezione(self, nuovo_idx):
-        """Resetta la sezione corrente alla sua pagina iniziale prima di cambiarla."""
+        """Resetta la sezione corrente e aggiorna i dati della nuova prima di mostrarla."""
         vecchio_view = self.body_stack.currentWidget()
         if hasattr(vecchio_view, 'stacked_widget'):
             vecchio_view.stacked_widget.setCurrentIndex(0)
         self.body_stack.setCurrentIndex(nuovo_idx)
+        self._aggiorna_sezione(nuovo_idx)
+
+    def _aggiorna_sezione(self, idx):
+        if idx == 3 and self.controller_pazienti:
+            self.controller_pazienti.aggiorna_lista()
+        elif idx == 1 and self.controller_libretto:
+            self.controller_libretto.aggiorna_lista()
 
     def init_pages(self):
         self.data_manager = DataManager()
@@ -77,10 +84,19 @@ class MainWindow(QMainWindow):
         )
 
         self.view_libretto = ViewLibretto()
-        self.controller_libretto = ControllerLibretto(self.view_libretto, self.data_manager_libretto)
+        self.controller_libretto = ControllerLibretto(
+            self.view_libretto,
+            self.data_manager_libretto,
+            model_scadenzario=self.data_manager,
+            model_sale_operatorie=self.data_manager_sale_operatorie,
+        )
 
         self.view_pazienti = ViewPazienti()
-        self.controller_pazienti = ControllerPazienti(self.view_pazienti, self.data_manager_pazienti)
+        self.controller_pazienti = ControllerPazienti(
+            self.view_pazienti,
+            self.data_manager_pazienti,
+            model_sale_operatorie=self.data_manager_sale_operatorie,
+        )
 
         self.view_sale_operatorie = ViewSaleOperatorie()
         self.controller_sale_operatorie = ControllerSaleOperatorie(
@@ -92,8 +108,8 @@ class MainWindow(QMainWindow):
         )
 
         self.body_stack.addWidget(self.view_scad)
-        self.body_stack.addWidget(self.view_sale_operatorie)
         self.body_stack.addWidget(self.view_libretto)
+        self.body_stack.addWidget(self.view_sale_operatorie)
         self.body_stack.addWidget(self.view_pazienti)
 
 if __name__ == "__main__":

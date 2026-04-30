@@ -11,7 +11,6 @@ from PySide6.QtGui import QPixmap, QColor, QFont
 from src.views.components.colored_header_view import ColoredHeaderView
 
 
-# ── Palette cromatica per tipo di riga ───────────────────────────────────────
 _COLORI_RIGA = {
     "Reparto I":    "#dbeafe",   # blue-100
     "Reparto II":   "#dbeafe",   # blue-100
@@ -22,7 +21,6 @@ _COLORI_RIGA = {
     "Day Surgery":  "#fae8ff",   # fuchsia-100
 }
 
-# Colori intestazioni verticali (usati dal ColoredHeaderView)
 _COLORI_HEADER = {
     "Giorno":       "#e2e8f0",   # slate-200
     "Tipo Guardia": "#c7d2fe",   # indigo-200
@@ -35,7 +33,6 @@ _COLORI_HEADER = {
     "Day Surgery":  "#e9d5ff",
 }
 
-# Colori testo per il Tipo Guardia
 _COLORI_GUARDIA = {
     "118": "#b91c1c",   # red-700
     "PI":  "#c2410c",   # orange-700
@@ -57,8 +54,6 @@ class ViewScadenzario(QWidget):
         self.setup_ui()
         self.load_styles()
 
-    # ── Costruzione UI ────────────────────────────────────────────────────────
-
     def setup_ui(self):
         main_layout = QVBoxLayout(self)
         main_layout.setContentsMargins(0, 0, 0, 0)
@@ -76,7 +71,6 @@ class ViewScadenzario(QWidget):
         layout.setSpacing(0)
         layout.setContentsMargins(50, 60, 50, 60)
 
-        # ── Header: titolo + accent bar + sottotitolo ─────────────────────────
         header = QVBoxLayout()
         header.setSpacing(10)
         header.setAlignment(Qt.AlignmentFlag.AlignCenter)
@@ -86,7 +80,6 @@ class ViewScadenzario(QWidget):
         titolo.setAlignment(Qt.AlignmentFlag.AlignCenter)
         header.addWidget(titolo)
 
-        # Accent bar centrata sotto il titolo
         accent_row = QHBoxLayout()
         accent_row.setAlignment(Qt.AlignmentFlag.AlignCenter)
         accent_bar = QFrame()
@@ -105,7 +98,6 @@ class ViewScadenzario(QWidget):
         layout.addLayout(header)
         layout.addSpacing(52)
 
-        # ── Cards ─────────────────────────────────────────────────────────────
         cards_layout = QHBoxLayout()
         cards_layout.setSpacing(40)
         cards_layout.setAlignment(Qt.AlignmentFlag.AlignCenter)
@@ -142,7 +134,6 @@ class ViewScadenzario(QWidget):
         layout.setContentsMargins(30, 16, 30, 24)
         layout.setSpacing(10)
 
-        # Barra navigazione
         nav = QHBoxLayout()
         nav.setContentsMargins(0, 0, 0, 6)
 
@@ -171,7 +162,6 @@ class ViewScadenzario(QWidget):
         sp2.setRetainSizeWhenHidden(True)
         self.btn_next.setSizePolicy(sp2)
 
-        # Badge modalità e stato
         self.lbl_modalita = QLabel("")
         self.lbl_modalita.setObjectName("LblModalita")
         self.lbl_modalita.setAlignment(Qt.AlignmentFlag.AlignCenter)
@@ -194,7 +184,6 @@ class ViewScadenzario(QWidget):
         nav.addLayout(badge_row)
         layout.addLayout(nav)
 
-        # Legenda tipi guardia
         legenda = QHBoxLayout()
         legenda.setSpacing(16)
         legenda.addStretch()
@@ -213,7 +202,6 @@ class ViewScadenzario(QWidget):
         legenda.addStretch()
         layout.addLayout(legenda)
 
-        # Tabella
         self.tabella = QTableWidget()
         self.tabella.setRowCount(len(self.row_labels))
         self.tabella.setVerticalHeaderLabels(self.row_labels)
@@ -233,7 +221,6 @@ class ViewScadenzario(QWidget):
         self.tabella.setVerticalScrollMode(QTableWidget.ScrollMode.ScrollPerPixel)
         self.tabella.setHorizontalScrollMode(QTableWidget.ScrollMode.ScrollPerPixel)
 
-        # Header verticale colorato
         color_map = {
             idx: _COLORI_HEADER.get(label, "#f8fafc")
             for idx, label in enumerate(self.row_labels)
@@ -247,7 +234,6 @@ class ViewScadenzario(QWidget):
 
         layout.addWidget(self.tabella)
 
-        # Bottone convalida
         self.btn_convalida = QPushButton("CONVALIDA DEFINITIVAMENTE IL MESE")
         self.btn_convalida.setObjectName("BtnConvalida")
         self.btn_convalida.setFixedHeight(60)
@@ -255,8 +241,6 @@ class ViewScadenzario(QWidget):
         layout.addWidget(self.btn_convalida)
 
         self.stacked_widget.addWidget(self.page_calendario)
-
-    # ── Factory card ──────────────────────────────────────────────────────────
 
     def _crea_card(self, titolo, descrizione, icon_path, object_name):
         btn = QPushButton()
@@ -295,13 +279,11 @@ class ViewScadenzario(QWidget):
         lbl_desc.setAlignment(Qt.AlignmentFlag.AlignCenter)
         lbl_desc.setWordWrap(True)
 
-        # Separatore interno
         sep = QFrame()
         sep.setObjectName("CardSeparatore")
         sep.setFrameShape(QFrame.Shape.HLine)
         sep.setFixedHeight(1)
 
-        # Etichetta azione
         lbl_azione = QLabel("Accedi  →")
         lbl_azione.setObjectName("CardAzione")
         lbl_azione.setAlignment(Qt.AlignmentFlag.AlignCenter)
@@ -318,8 +300,6 @@ class ViewScadenzario(QWidget):
 
         return btn
 
-    # ── Factory celle tabella ─────────────────────────────────────────────────
-
     def crea_item_giorno(self, nome_giorno, is_festivo, is_oggi=False):
         """Item stilizzato per la riga-header del giorno (riga 0)."""
         item = QTableWidgetItem(nome_giorno)
@@ -328,7 +308,7 @@ class ViewScadenzario(QWidget):
         item.setFont(QFont("Segoe UI", 11, QFont.Weight.Bold))
 
         if is_oggi and not is_festivo:
-            item.setBackground(QColor("#f59e0b"))   # amber-500 vivace
+            item.setBackground(QColor("#f59e0b"))
             item.setForeground(QColor("#ffffff"))
         elif is_festivo:
             item.setBackground(QColor("#e2e8f0"))
@@ -350,14 +330,12 @@ class ViewScadenzario(QWidget):
             item.setForeground(QColor("#94a3b8"))
             item.setFont(QFont("Segoe UI", 13, QFont.Weight.Normal))
         else:
-            # Sfondo: "oggi" ha priorità sul colore di riga
             if is_oggi:
-                item.setBackground(QColor("#fef3c7"))   # amber-100
+                item.setBackground(QColor("#fef3c7"))
             else:
                 bg = _COLORI_RIGA.get(nome_riga, "")
                 item.setBackground(QColor(bg) if bg else QColor(Qt.GlobalColor.transparent))
 
-            # Font e colore testo
             if nome_riga == "Tipo Guardia":
                 item.setForeground(QColor(_COLORI_GUARDIA.get(valore, "#1e293b")))
                 item.setFont(QFont("Segoe UI", 14, QFont.Weight.Bold))
@@ -375,8 +353,6 @@ class ViewScadenzario(QWidget):
             self.crea_item_cella(valore, is_festivo, nome_riga, is_oggi)
         )
         self.tabella.blockSignals(False)
-
-    # ── Badge navigazione ─────────────────────────────────────────────────────
 
     def aggiorna_badge_modalita(self, modalita, stato):
         """Aggiorna i badge con colori semantici. In STORICO nasconde il badge stato."""
@@ -407,8 +383,6 @@ class ViewScadenzario(QWidget):
                 f"color: {fg_s}; background-color: {bg_s}; font-weight: bold; "
                 f"font-size: 12px; border-radius: 8px; padding: 5px 10px;"
             )
-
-    # ── Stili ─────────────────────────────────────────────────────────────────
 
     def load_styles(self):
         style_path = os.path.join("asset", "styles", "scadenzario.qss")

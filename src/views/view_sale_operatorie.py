@@ -9,19 +9,21 @@ from PySide6.QtGui import QPixmap, QColor, QFont
 
 
 class ViewSaleOperatorie(QWidget):
+    DEFAULT_OPS = 5   # righe operazione visibili di default
+    MAX_OPS = 12      # massimo assoluto per la crescita dinamica
+
     def __init__(self):
         super().__init__()
         self.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, True)
 
-        self.row_labels = [
-            "Giorno", "Specializzandi",
-            "8.00-10.00", "10.00-12.00", "14.00-16.00", "16.00-18.00",
-        ]
+        self.current_max_ops = self.DEFAULT_OPS
+        self.row_labels = (
+            ["Giorno", "Specializzandi"]
+            + [f"Op. {i+1}" for i in range(self.current_max_ops)]
+        )
 
         self.setup_ui()
         self.load_styles()
-
-    # ── Costruzione UI ────────────────────────────────────────────────────────
 
     def setup_ui(self):
         main_layout = QVBoxLayout(self)
@@ -40,7 +42,6 @@ class ViewSaleOperatorie(QWidget):
         layout.setSpacing(0)
         layout.setContentsMargins(50, 60, 50, 60)
 
-        # ── Header ────────────────────────────────────────────────────────────
         header = QVBoxLayout()
         header.setSpacing(10)
         header.setAlignment(Qt.AlignmentFlag.AlignCenter)
@@ -68,7 +69,6 @@ class ViewSaleOperatorie(QWidget):
         layout.addLayout(header)
         layout.addSpacing(52)
 
-        # ── Cards ─────────────────────────────────────────────────────────────
         cards_layout = QHBoxLayout()
         cards_layout.setSpacing(40)
         cards_layout.setAlignment(Qt.AlignmentFlag.AlignCenter)
@@ -105,7 +105,6 @@ class ViewSaleOperatorie(QWidget):
         layout.setContentsMargins(30, 16, 30, 24)
         layout.setSpacing(10)
 
-        # ── Barra navigazione ─────────────────────────────────────────────────
         nav = QHBoxLayout()
         nav.setContentsMargins(0, 0, 0, 6)
 
@@ -125,6 +124,7 @@ class ViewSaleOperatorie(QWidget):
         self.btn_mese_anno = QPushButton()
         self.btn_mese_anno.setObjectName("btnMeseAnno")
         self.btn_mese_anno.setEnabled(False)
+        self.btn_mese_anno.setFixedHeight(46)
 
         self.btn_next = QPushButton("›")
         self.btn_next.setObjectName("btnNav")
@@ -157,19 +157,22 @@ class ViewSaleOperatorie(QWidget):
 
         layout.addLayout(nav)
 
-        # ── Tabella ───────────────────────────────────────────────────────────
         self.tabella = QTableWidget()
-        self.tabella.setRowCount(len(self.row_labels))
+        self.tabella.setRowCount(2 + self.current_max_ops)
         self.tabella.setVerticalHeaderLabels(self.row_labels)
 
         self.tabella.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.Stretch)
         self.tabella.horizontalHeader().setSectionsClickable(False)
         self.tabella.horizontalHeader().setHighlightSections(False)
 
-        self.tabella.verticalHeader().setSectionResizeMode(QHeaderView.ResizeMode.Stretch)
-        self.tabella.verticalHeader().setMinimumSectionSize(55)
+        self.tabella.verticalHeader().setSectionResizeMode(QHeaderView.ResizeMode.Fixed)
         self.tabella.verticalHeader().setSectionsClickable(False)
         self.tabella.verticalHeader().setHighlightSections(False)
+
+        self.tabella.setRowHeight(0, 46)   # Giorno
+        self.tabella.setRowHeight(1, 60)   # Specializzandi
+        for i in range(2, 2 + self.current_max_ops):
+            self.tabella.setRowHeight(i, 82)
 
         self.tabella.setCornerButtonEnabled(False)
         self.tabella.setWordWrap(True)
@@ -181,9 +184,8 @@ class ViewSaleOperatorie(QWidget):
         self.tabella.setVerticalScrollMode(QTableWidget.ScrollMode.ScrollPerPixel)
         self.tabella.setHorizontalScrollMode(QTableWidget.ScrollMode.ScrollPerPixel)
 
-        layout.addWidget(self.tabella)
+        layout.addWidget(self.tabella, 1)
 
-        # ── Bottoni azione in basso ───────────────────────────────────────────
         self.btn_pianifica = QPushButton("PIANIFICA SETTIMANA")
         self.btn_pianifica.setObjectName("BtnPianifica")
         self.btn_pianifica.setFixedHeight(56)
@@ -206,8 +208,6 @@ class ViewSaleOperatorie(QWidget):
         layout.addWidget(self.btn_convalida)
 
         self.stacked_widget.addWidget(self.page_calendario)
-
-    # ── Factory card ──────────────────────────────────────────────────────────
 
     def _crea_card(self, titolo, descrizione, icon_path, object_name):
         btn = QPushButton()
@@ -267,7 +267,39 @@ class ViewSaleOperatorie(QWidget):
 
         return btn
 
-    # ── Factory celle tabella ─────────────────────────────────────────────────
+    def adatta_righe_operazioni(self, n_actual: int):
+        """
+        Ridimensiona le righe operazione (min DEFAULT_OPS, max MAX_OPS)
+        e aggiorna l'altezza massima della tabella per evitare spazio bianco
+        vuoto sotto l'ultima riga prima dei pulsanti.
+        """
+        n_display = max(self.DEFAULT_OPS, min(n_actual, self.MAX_OPS))
+
+        if n_display != self.current_max_ops:
+            self.current_max_ops = n_display
+            self.tabella.setRowCount(n_display + 2)
+            labels = ["Giorno", "Specializzandi"] + [f"Op. {i+1}" for i in range(n_display)]
+            self.tabella.setVerticalHeaderLabels(labels)
+            for i in range(2, n_display + 2):
+                if self.tabella.rowHeight(i) == 0:
+                    self.tabella.setRowHeight(i, 82)
+
+        self._adatta_altezza_tabella()
+
+    def _adatta_altezza_tabella(self):
+        """Imposta altezza minima sufficiente a mostrare DEFAULT_OPS righe operazione."""
+        h_header = self.tabella.horizontalHeader().height()
+        if h_header <= 0:
+            h_header = 42
+        h_min = (
+            h_header
+            + self.tabella.rowHeight(0)
+            + self.tabella.rowHeight(1)
+            + sum(self.tabella.rowHeight(i) for i in range(2, 2 + self.DEFAULT_OPS))
+            + 4
+        )
+        self.tabella.setMinimumHeight(h_min)
+        self.tabella.setMaximumHeight(16777215)
 
     def crea_item_giorno(self, nome_giorno, is_festivo, is_oggi=False):
         item = QTableWidgetItem(nome_giorno)
@@ -292,7 +324,6 @@ class ViewSaleOperatorie(QWidget):
 
         if is_inattivo:
             item.setFlags(item.flags() & ~Qt.ItemFlag.ItemIsEditable)
-            # Sfondo leggermente dorato anche per le celle inattive della colonna "oggi"
             item.setBackground(QColor("#fffbeb") if is_oggi else QColor(Qt.GlobalColor.transparent))
             item.setForeground(QColor(Qt.GlobalColor.transparent))
             item.setFont(QFont("Segoe UI", 10, QFont.Weight.Normal))
@@ -302,7 +333,79 @@ class ViewSaleOperatorie(QWidget):
             item.setFont(QFont("Segoe UI", 10, QFont.Weight.DemiBold))
         return item
 
-    # ── Badge ─────────────────────────────────────────────────────────────────
+    def crea_widget_operazione(self, op: dict, is_oggi: bool = False, on_click=None) -> QFrame:
+        frame = QFrame()
+        frame.setObjectName("CellaOperazioneOggi" if is_oggi else "CellaOperazione")
+        frame.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, True)
+
+        vl = QVBoxLayout(frame)
+        vl.setContentsMargins(10, 6, 10, 6)
+        vl.setSpacing(3)
+
+        ora_row = QHBoxLayout()
+        ora_row.setSpacing(6)
+        lbl_ora = QLabel(f"{op.get('ora_inizio','?')} – {op.get('ora_fine','?')}")
+        lbl_ora.setObjectName("LblOraOp")
+        lbl_ora.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents, True)
+        badge_dur = QLabel(f"{op.get('durata', '?')} min")
+        badge_dur.setObjectName("BadgeDurataOp")
+        badge_dur.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents, True)
+        ora_row.addWidget(lbl_ora)
+        ora_row.addStretch()
+        ora_row.addWidget(badge_dur)
+
+        lbl_nome = QLabel(op.get("nome_paziente", "—"))
+        lbl_nome.setObjectName("LblNomePazOp")
+        lbl_nome.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents, True)
+
+        bottom_row = QHBoxLayout()
+        bottom_row.setSpacing(6)
+
+        interventi_list = op.get("interventi", [])
+        codici = [i.get("codice", "") for i in interventi_list if i.get("codice")]
+        codici_text = "  ·  ".join(codici) if codici else op.get("codice_intervento", "")
+        if codici_text:
+            lbl_codici = QLabel(codici_text)
+            lbl_codici.setObjectName("LblSubOp")
+            lbl_codici.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents, True)
+            bottom_row.addWidget(lbl_codici)
+
+        bottom_row.addStretch()
+
+        cpx = op.get("complessita", "")
+        if cpx:
+            badge_cpx = QLabel(cpx)
+            badge_cpx.setObjectName("BadgeComplessitaOp")
+            badge_cpx.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents, True)
+            bottom_row.addWidget(badge_cpx)
+
+        vl.addLayout(ora_row)
+        vl.addWidget(lbl_nome)
+        vl.addLayout(bottom_row)
+
+        if on_click:
+            frame.setCursor(Qt.CursorShape.PointingHandCursor)
+            frame.mousePressEvent = lambda e: on_click()
+
+        return frame
+
+    def crea_widget_vuoto(self, is_oggi: bool = False, on_click=None) -> QFrame:
+        frame = QFrame()
+        if on_click:
+            frame.setObjectName("SlotVuotoClickable")
+            frame.setCursor(Qt.CursorShape.PointingHandCursor)
+            vl = QVBoxLayout(frame)
+            vl.setContentsMargins(0, 0, 0, 0)
+            lbl = QLabel("+")
+            lbl.setObjectName("LblSlotVuoto")
+            lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
+            lbl.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents, True)
+            vl.addWidget(lbl)
+            frame.mousePressEvent = lambda e: on_click()
+        else:
+            frame.setObjectName("CellaVuotaOggi" if is_oggi else "CellaVuota")
+        frame.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, True)
+        return frame
 
     def aggiorna_badge(self, modalita, stato):
         colori_modalita = {
@@ -332,8 +435,6 @@ class ViewSaleOperatorie(QWidget):
                 f"color: {fg_s}; background-color: {bg_s}; font-weight: bold; "
                 f"font-size: 12px; border-radius: 8px; padding: 5px 10px;"
             )
-
-    # ── Stili ─────────────────────────────────────────────────────────────────
 
     def load_styles(self):
         style_path = os.path.join("asset", "styles", "sale_operatorie.qss")
