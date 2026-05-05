@@ -78,6 +78,8 @@ class ControllerSaleOperatorie:
         self.view.btn_convalida.clicked.connect(self.convalida_settimana)
         self.view.tabella.cellChanged.connect(self.salva_modifica_cella)
         self.view.tabella.cellClicked.connect(self._on_cella_cliccata)
+        self.view.tabella.operazione_spostata.connect(self._sposta_operazione)
+        self.view.tabella.operazione_scambiata.connect(self._scambia_operazioni)
 
     def apri_vista(self, modalita):
         self.modalita_corrente = modalita
@@ -262,12 +264,18 @@ class ControllerSaleOperatorie:
         self.view.tabella.setColumnCount(5)
         self.view.tabella.setHorizontalHeaderLabels(["Lunedì", "Martedì", "Mercoledì", "Giovedì", "Venerdì"])
 
+        can_edit = (
+            self.modalita_corrente in ("PIANIFICAZIONE", "CONSULTAZIONE")
+            and stato != "CONVALIDATO"
+        )
+
         max_ops_sett = 0
         for col in range(5):
             data_str = (self.settimana_display + datetime.timedelta(days=col)).strftime("%Y-%m-%d")
             max_ops_sett = max(max_ops_sett, len(self.model.get_operazioni(data_str)))
         self.view.adatta_righe_operazioni(max_ops_sett)
 
+        drop_targets: dict = {}
         for col in range(5):
             data_col = self.settimana_display + datetime.timedelta(days=col)
             data_str = data_col.strftime("%Y-%m-%d")
@@ -282,21 +290,26 @@ class ControllerSaleOperatorie:
             self.view.tabella.setItem(1, col, item_spec)
 
             operazioni = self.model.get_operazioni(data_str)
+            drop_targets[col] = 2 + len(operazioni)
             for op_idx in range(self.view.current_max_ops):
                 row = op_idx + 2
                 if op_idx < len(operazioni):
                     op = operazioni[op_idx]
-                    on_click = (lambda r=row, c=col: self._on_cella_cliccata(r, c)) if op.get("nome_paziente") else None
-                    widget = self.view.crea_widget_operazione(op, is_oggi, on_click)
+                    ha_paziente = bool(op.get("nome_paziente"))
+                    on_click = (lambda r=row, c=col: self._on_cella_cliccata(r, c)) if ha_paziente else None
+                    widget = self.view.crea_widget_operazione(
+                        op, is_oggi, on_click,
+                        draggable=can_edit and ha_paziente,
+                        col=col, op_idx=op_idx,
+                    )
                     self.view.tabella.setCellWidget(row, col, widget)
                 else:
                     on_click_vuoto = None
-                    if (self.modalita_corrente in ("PIANIFICAZIONE", "CONSULTAZIONE")
-                            and stato != "CONVALIDATO"
-                            and op_idx == len(operazioni)):
+                    if can_edit and op_idx == len(operazioni):
                         on_click_vuoto = (lambda r=row, c=col: self._on_slot_vuoto_cliccato(r, c))
                     self.view.tabella.setCellWidget(row, col, self.view.crea_widget_vuoto(is_oggi, on_click_vuoto))
 
+        self.view.tabella.set_drop_targets(drop_targets if can_edit else {})
         self.view.tabella.blockSignals(False)
 
     def _ha_piano_esistente(self) -> bool:
@@ -562,6 +575,78 @@ class ControllerSaleOperatorie:
         if attivita_per_spec:
             self.model_lib.registra_attivita_settimana(attivita_per_spec)
 
+    def _ricalcola_orari(self, operazioni: list):
+        """Ricalcola ora_inizio / ora_fine di ogni operazione sequenzialmente dal 08:00."""
+        min_corrente = _str_to_min("08:00")
+        for op in operazioni:
+            durata = op.get("durata", 0)
+            op["ora_inizio"] = _min_to_str(min_corrente)
+            op["ora_fine"] = _min_to_str(min_corrente + durata)
+            min_corrente += durata
+
+    def _scambia_operazioni(self, col: int, src_idx: int, dst_idx: int):
+        """Swap di due operazioni nello stesso giorno, con conferma modal."""
+        if (self.modalita_corrente not in ("PIANIFICAZIONE", "CONSULTAZIONE")
+                or self._stato_corrente == "CONVALIDATO"):
+            return
+
+        data_col = self.settimana_display + datetime.timedelta(days=col)
+        data_str = data_col.strftime("%Y-%m-%d")
+        operazioni = self.model.get_operazioni(data_str)
+
+        if src_idx >= len(operazioni) or dst_idx >= len(operazioni):
+            return
+
+        nome_src = operazioni[src_idx].get("nome_paziente", "—")
+        nome_dst = operazioni[dst_idx].get("nome_paziente", "—")
+        giorno = GIORNI_ITA[col]
+        mese = MESI_ITA[data_col.month - 1]
+
+        if not self._conferma(
+            "Scambia operazioni",
+            f"Vuoi scambiare l'ordine di queste due operazioni\n"
+            f"del {giorno} {data_col.day} {mese}?\n\n"
+            f"  • {nome_src}\n"
+            f"  • {nome_dst}\n\n"
+            "Gli orari verranno ricalcolati automaticamente.",
+            testo_si="Scambia",
+        ):
+            self.aggiorna_tabella()
+            return
+
+        operazioni[src_idx], operazioni[dst_idx] = operazioni[dst_idx], operazioni[src_idx]
+        self._ricalcola_orari(operazioni)
+        self.model.set_operazioni(data_str, operazioni)
+        self.aggiorna_tabella()
+
+    def _sposta_operazione(self, src_col: int, src_op_idx: int, dst_col: int):
+        """Sposta un'operazione da un giorno a un altro (in coda) e salva il JSON."""
+        if (self.modalita_corrente not in ("PIANIFICAZIONE", "CONSULTAZIONE")
+                or self._stato_corrente == "CONVALIDATO"):
+            return
+
+        src_date = self.settimana_display + datetime.timedelta(days=src_col)
+        dst_date = self.settimana_display + datetime.timedelta(days=dst_col)
+        src_str = src_date.strftime("%Y-%m-%d")
+        dst_str = dst_date.strftime("%Y-%m-%d")
+
+        src_ops = self.model.get_operazioni(src_str)
+        dst_ops = self.model.get_operazioni(dst_str)
+
+        if src_op_idx >= len(src_ops):
+            return
+
+        op = src_ops.pop(src_op_idx)
+        dst_ops.append(op)
+
+        self._ricalcola_orari(src_ops)
+        self._ricalcola_orari(dst_ops)
+
+        self.model.set_operazioni(src_str, src_ops)
+        self.model.set_operazioni(dst_str, dst_ops)
+
+        self.aggiorna_tabella()
+
     def _rimuovi_paziente_da_slot(self, dialog, data_str: str, op_idx: int):
         if not self._conferma(
             "Rimuovi paziente",
@@ -573,12 +658,7 @@ class ControllerSaleOperatorie:
         operazioni = self.model.get_operazioni(data_str)
         if op_idx < len(operazioni):
             operazioni.pop(op_idx)
-            min_corrente = _str_to_min("08:00")
-            for op in operazioni:
-                durata = op.get("durata", 0)
-                op["ora_inizio"] = _min_to_str(min_corrente)
-                op["ora_fine"]   = _min_to_str(min_corrente + durata)
-                min_corrente += durata
+            self._ricalcola_orari(operazioni)
             self.model.set_operazioni(data_str, operazioni)
             self.aggiorna_tabella()
         dialog.accept()

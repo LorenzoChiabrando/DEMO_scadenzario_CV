@@ -2,10 +2,219 @@ import os
 from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QPushButton,
     QTableWidget, QTableWidgetItem, QHeaderView, QScroller,
-    QStackedWidget, QLabel, QSizePolicy, QGraphicsDropShadowEffect, QFrame,
+    QStackedWidget, QLabel, QSizePolicy, QGraphicsDropShadowEffect,
+    QGraphicsOpacityEffect, QFrame, QApplication,
 )
-from PySide6.QtCore import Qt
-from PySide6.QtGui import QPixmap, QColor, QFont
+from PySide6.QtCore import Qt, Signal, QMimeData
+from PySide6.QtGui import QPixmap, QColor, QFont, QDrag, QPainter
+
+
+class DraggableOperationFrame(QFrame):
+    """Frame per un'operazione pianificata: supporta click (popup) e drag (sposta giorno)."""
+
+    def __init__(self):
+        super().__init__()
+        self._drag_start_pos = None
+        self._drag_col = -1
+        self._drag_op_idx = -1
+        self._can_drag = False
+        self._dragging = False
+        self._on_click = None
+
+    def setup_drag(self, col: int, op_idx: int, enabled: bool):
+        self._drag_col = col
+        self._drag_op_idx = op_idx
+        self._can_drag = enabled
+
+    def set_on_click(self, callback):
+        self._on_click = callback
+
+    def mousePressEvent(self, event):
+        if event.button() == Qt.MouseButton.LeftButton:
+            self._drag_start_pos = event.position().toPoint()
+            self._dragging = False
+        event.accept()
+
+    def mouseMoveEvent(self, event):
+        if (self._can_drag
+                and (event.buttons() & Qt.MouseButton.LeftButton)
+                and self._drag_start_pos is not None
+                and not self._dragging):
+            dist = (event.position().toPoint() - self._drag_start_pos).manhattanLength()
+            if dist >= QApplication.startDragDistance():
+                self._dragging = True
+                self._esegui_drag()
+        event.accept()
+
+    def mouseReleaseEvent(self, event):
+        if event.button() == Qt.MouseButton.LeftButton and not self._dragging:
+            if self._on_click:
+                self._on_click()
+        self._drag_start_pos = None
+        self._dragging = False
+        event.accept()
+
+    def _esegui_drag(self):
+        # Grab a piena opacità prima di applicare effetti
+        source_pix = self.grab()
+
+        # Dim cella sorgente: indica visivamente che l'op sta per essere spostata
+        dim = QGraphicsOpacityEffect()
+        dim.setOpacity(0.35)
+        self.setGraphicsEffect(dim)
+
+        # Ghost semi-trasparente: effetto "sollevato" durante il trascinamento
+        ghost = QPixmap(source_pix.size())
+        ghost.fill(Qt.GlobalColor.transparent)
+        p = QPainter(ghost)
+        p.setOpacity(0.78)
+        p.drawPixmap(0, 0, source_pix)
+        p.end()
+
+        drag = QDrag(self)
+        mime = QMimeData()
+        mime.setText(f"{self._drag_col}:{self._drag_op_idx}")
+        drag.setMimeData(mime)
+        drag.setPixmap(ghost)
+        if self._drag_start_pos is not None:
+            drag.setHotSpot(self._drag_start_pos)
+
+        result = drag.exec(Qt.DropAction.MoveAction)
+
+        # Se il drag è stato annullato (ESC / drop ignorato), ripristina widget
+        if result != Qt.DropAction.MoveAction:
+            try:
+                self.setGraphicsEffect(None)
+            except RuntimeError:
+                pass
+
+
+class TabellaOperatorie(QTableWidget):
+    """QTableWidget con supporto drop: sposta tra giorni o scambia nello stesso giorno."""
+
+    operazione_spostata  = Signal(int, int, int)  # src_col, src_op_idx, dst_col
+    operazione_scambiata = Signal(int, int, int)  # col, src_op_idx, dst_op_idx
+
+    def __init__(self):
+        super().__init__()
+        self._drag_over_col = -1
+        self._drop_targets: dict = {}  # col → prima riga vuota (per move cross-giorno)
+        self.setAcceptDrops(True)
+        self.viewport().setAcceptDrops(True)
+
+        self._cell_overlay = QFrame(self.viewport())
+        self._cell_overlay.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents)
+        self._cell_overlay.hide()
+        self._cell_overlay_mode = ""  # "move" | "swap"
+
+    def set_drop_targets(self, targets: dict):
+        self._drop_targets = targets
+
+    def _mostra_overlay(self, row: int, col: int, mode: str):
+        """Posiziona e mostra l'overlay sulla cella (row, col)."""
+        rect = self.visualRect(self.model().index(row, col))
+        if not rect.isValid() or rect.isEmpty():
+            self._cell_overlay.hide()
+            return
+        if mode != self._cell_overlay_mode:
+            self._cell_overlay_mode = mode
+            if mode == "swap":
+                self._cell_overlay.setStyleSheet(
+                    "background-color: rgba(234, 88, 12, 45);"
+                    "border: 2px dashed rgba(234, 88, 12, 200);"
+                    "border-radius: 6px;"
+                )
+            else:
+                self._cell_overlay.setStyleSheet(
+                    "background-color: rgba(59, 130, 246, 50);"
+                    "border: 2px dashed rgba(59, 130, 246, 210);"
+                    "border-radius: 6px;"
+                )
+        self._cell_overlay.setGeometry(rect.adjusted(3, 3, -3, -3))
+        self._cell_overlay.show()
+        self._cell_overlay.raise_()
+
+    def _aggiorna_overlay(self, col: int, src_col: int, src_op_idx: int, cursor_y: int):
+        if col < 0:
+            self._cell_overlay.hide()
+            return
+
+        if col == src_col:
+            # Stesso giorno → swap: evidenzia l'operazione target
+            target_row = self.rowAt(cursor_y)
+            src_row = src_op_idx + 2
+            n_ops = self._drop_targets.get(col, 2) - 2
+            if (target_row >= 2
+                    and target_row != src_row
+                    and (target_row - 2) < n_ops):
+                self._mostra_overlay(target_row, col, "swap")
+            else:
+                self._cell_overlay.hide()
+        else:
+            # Giorno diverso → move: evidenzia la prima riga vuota
+            target_row = self._drop_targets.get(col, -1)
+            if target_row < 0 or target_row >= self.rowCount():
+                self._cell_overlay.hide()
+                return
+            self._mostra_overlay(target_row, col, "move")
+
+    def dragEnterEvent(self, event):
+        if event.mimeData().hasText():
+            event.acceptProposedAction()
+        else:
+            event.ignore()
+
+    def dragMoveEvent(self, event):
+        if not event.mimeData().hasText():
+            event.ignore()
+            return
+        pos = event.position().toPoint()
+        col = self.columnAt(pos.x())
+        try:
+            src_col, src_op_idx = map(int, event.mimeData().text().split(':'))
+        except (ValueError, IndexError):
+            src_col, src_op_idx = -1, -1
+        self._drag_over_col = col
+        self._aggiorna_overlay(col, src_col, src_op_idx, pos.y())
+        event.acceptProposedAction()
+
+    def dragLeaveEvent(self, event):
+        self._drag_over_col = -1
+        self._cell_overlay.hide()
+        super().dragLeaveEvent(event)
+
+    def dropEvent(self, event):
+        self._drag_over_col = -1
+        self._cell_overlay.hide()
+        if not event.mimeData().hasText():
+            event.ignore()
+            return
+        try:
+            src_col, src_idx = map(int, event.mimeData().text().split(':'))
+        except ValueError:
+            event.ignore()
+            return
+
+        pos = event.position().toPoint()
+        dst_col = self.columnAt(pos.x())
+        if dst_col < 0:
+            event.acceptProposedAction()
+            return
+
+        if dst_col == src_col:
+            # Stesso giorno → swap
+            target_row = self.rowAt(pos.y())
+            n_ops = self._drop_targets.get(dst_col, 2) - 2
+            src_row = src_idx + 2
+            if (target_row >= 2
+                    and target_row != src_row
+                    and (target_row - 2) < n_ops):
+                self.operazione_scambiata.emit(dst_col, src_idx, target_row - 2)
+        else:
+            # Giorno diverso → sposta in coda
+            self.operazione_spostata.emit(src_col, src_idx, dst_col)
+
+        event.acceptProposedAction()
 
 
 class ViewSaleOperatorie(QWidget):
@@ -157,7 +366,7 @@ class ViewSaleOperatorie(QWidget):
 
         layout.addLayout(nav)
 
-        self.tabella = QTableWidget()
+        self.tabella = TabellaOperatorie()
         self.tabella.setRowCount(2 + self.current_max_ops)
         self.tabella.setVerticalHeaderLabels(self.row_labels)
 
@@ -333,8 +542,10 @@ class ViewSaleOperatorie(QWidget):
             item.setFont(QFont("Segoe UI", 10, QFont.Weight.DemiBold))
         return item
 
-    def crea_widget_operazione(self, op: dict, is_oggi: bool = False, on_click=None) -> QFrame:
-        frame = QFrame()
+    def crea_widget_operazione(self, op: dict, is_oggi: bool = False, on_click=None,
+                               draggable: bool = False, col: int = -1,
+                               op_idx: int = -1) -> DraggableOperationFrame:
+        frame = DraggableOperationFrame()
         frame.setObjectName("CellaOperazioneOggi" if is_oggi else "CellaOperazione")
         frame.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, True)
 
@@ -383,9 +594,10 @@ class ViewSaleOperatorie(QWidget):
         vl.addWidget(lbl_nome)
         vl.addLayout(bottom_row)
 
-        if on_click:
+        frame.set_on_click(on_click)
+        frame.setup_drag(col, op_idx, draggable)
+        if on_click or draggable:
             frame.setCursor(Qt.CursorShape.PointingHandCursor)
-            frame.mousePressEvent = lambda e: on_click()
 
         return frame
 

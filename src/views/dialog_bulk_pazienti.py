@@ -3,7 +3,7 @@ import csv
 from PySide6.QtWidgets import (
     QDialog, QVBoxLayout, QHBoxLayout, QLabel, QFrame,
     QPushButton, QTableWidget, QTableWidgetItem, QHeaderView,
-    QFileDialog, QMessageBox, QComboBox,
+    QFileDialog, QMessageBox, QComboBox, QScroller,
 )
 from PySide6.QtCore import Qt
 from PySide6.QtGui import QColor
@@ -47,6 +47,7 @@ _FG_OK  = QColor("#1e293b")
 class DialogBulkPazienti(QDialog):
     def __init__(self, parent=None):
         super().__init__(parent)
+        self._interventi_per_riga: dict[int, list] = {}
         self.setWindowTitle("Importa Pazienti da CSV")
         self.setMinimumWidth(1060)
         self.setMinimumHeight(560)
@@ -69,6 +70,8 @@ class DialogBulkPazienti(QDialog):
             "Colonne richieste: "
             "<b>nome, cognome, diagnosi, codice_intervento, "
             "descrizione_intervento, tipo_chirurgia, complessita, urgenza</b>. "
+            "Colonna opzionale: <b>durata_intervento</b> (es. <i>90</i> oppure <i>60;90</i> per più interventi). "
+            "Usa il punto e virgola (<b>;</b>) per separare più codici, descrizioni e durate nello stesso paziente. "
             "Le celle in rosso indicano valori mancanti o non validi: modificale direttamente prima di importare."
         )
         lbl_sub.setObjectName("SottoTitoloDialog")
@@ -121,11 +124,17 @@ class DialogBulkPazienti(QDialog):
             self.tabella.setColumnWidth(col, w)
 
         self.tabella.setHorizontalScrollMode(QTableWidget.ScrollMode.ScrollPerPixel)
+        self.tabella.setVerticalScrollMode(QTableWidget.ScrollMode.ScrollPerPixel)
+        self.tabella.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOn)
         self.tabella.verticalHeader().setDefaultSectionSize(40)
         self.tabella.verticalHeader().setVisible(False)
         self.tabella.setAlternatingRowColors(False)
         self.tabella.setShowGrid(True)
+        self.tabella.setWordWrap(False)
         self.tabella.setSelectionBehavior(QTableWidget.SelectionBehavior.SelectRows)
+        QScroller.grabGesture(
+            self.tabella.viewport(), QScroller.ScrollerGestureType.LeftMouseButtonGesture
+        )
 
         # cellChanged si connette dopo il caricamento per evitare loop
         layout.addWidget(self.tabella)
@@ -199,14 +208,69 @@ class DialogBulkPazienti(QDialog):
         row = self.tabella.rowCount()
         self.tabella.insertRow(row)
 
-        for col in [_COL_NOME, _COL_COGNOME, _COL_DIAGNOSI,
-                    _COL_CODICE, _COL_INTERVENTO]:
+        # --- Testo semplice: nome, cognome, diagnosi ---
+        for col in [_COL_NOME, _COL_COGNOME, _COL_DIAGNOSI]:
             item = QTableWidgetItem(r.get(_CAMPI_CSV[col], ""))
-            item.setTextAlignment(Qt.AlignmentFlag.AlignVCenter | Qt.AlignmentFlag.AlignLeft
-                                  if col in (_COL_DIAGNOSI, _COL_INTERVENTO)
-                                  else Qt.AlignmentFlag.AlignCenter)
+            item.setTextAlignment(
+                Qt.AlignmentFlag.AlignVCenter | Qt.AlignmentFlag.AlignLeft
+                if col == _COL_DIAGNOSI else Qt.AlignmentFlag.AlignCenter
+            )
             self.tabella.setItem(row, col, item)
 
+        # --- Parse multi-intervento (separatore ";") ---
+        def _split(val: str) -> list[str]:
+            return [v.strip() for v in val.split(";") if v.strip()]
+
+        codici   = _split(r.get("codice_intervento", ""))
+        descrizi = _split(r.get("descrizione_intervento", ""))
+        dur_raw  = r.get("durata_intervento", "")
+
+        if ";" in dur_raw:
+            durate = []
+            for d in dur_raw.split(";"):
+                try:
+                    durate.append(int(d.strip()))
+                except ValueError:
+                    durate.append(90)
+        else:
+            try:
+                d = int(dur_raw.split()[0]) if dur_raw.strip() else 90
+            except (ValueError, AttributeError):
+                d = 90
+            durate = [d]
+
+        n = max(len(codici), len(descrizi), 1)
+        while len(codici)   < n: codici.append("")
+        while len(descrizi) < n: descrizi.append("")
+        if len(durate) == 1 and n > 1:
+            per_op = max(durate[0] // n, 15)
+            durate = [per_op] * n
+        while len(durate) < n: durate.append(90)
+
+        interventi = [
+            {"codice": codici[i], "descrizione": descrizi[i], "durata": durate[i]}
+            for i in range(n)
+        ]
+        self._interventi_per_riga[row] = interventi
+        total_dur = sum(iv["durata"] for iv in interventi)
+
+        # Codice e Descrizione: join con " ; " nella cella
+        cod_text  = " ; ".join(c for c in codici)  if codici  else ""
+        desc_text = " ; ".join(d for d in descrizi) if descrizi else ""
+
+        item_cod = QTableWidgetItem(cod_text)
+        item_cod.setTextAlignment(Qt.AlignmentFlag.AlignCenter)
+        if len(codici) > 1:
+            item_cod.setToolTip(cod_text.replace(" ; ", "\n"))
+        self.tabella.setItem(row, _COL_CODICE, item_cod)
+
+        item_desc = QTableWidgetItem(desc_text)
+        item_desc.setTextAlignment(Qt.AlignmentFlag.AlignVCenter | Qt.AlignmentFlag.AlignLeft)
+        if desc_text:
+            item_desc.setToolTip(desc_text.replace(" ; ", "\n"))
+        self.tabella.setItem(row, _COL_INTERVENTO, item_desc)
+
+        # --- Combo: tipo_chirurgia, complessita, urgenza ---
         for col, (opzioni, default) in _COMBO_DEFS.items():
             combo = self._crea_combo(opzioni)
             val = r.get(_CAMPI_CSV[col], "").capitalize()
@@ -217,13 +281,15 @@ class DialogBulkPazienti(QDialog):
             )
             self.tabella.setCellWidget(row, col, combo)
 
+        # --- Durata totale ---
         combo_dur = self._crea_combo(_DURATE_OPTIONS)
-        try:
-            dur_val = int(str(r.get("durata_intervento", "90")).split()[0])
-            dur_idx = combo_dur.findText(f"{dur_val} min")
-            combo_dur.setCurrentIndex(dur_idx if dur_idx >= 0 else 3)
-        except (ValueError, AttributeError):
-            combo_dur.setCurrentIndex(3)  # default 90 min
+        dur_str = f"{total_dur} min"
+        idx_dur = combo_dur.findText(dur_str)
+        if idx_dur >= 0:
+            combo_dur.setCurrentIndex(idx_dur)
+        else:
+            combo_dur.insertItem(0, dur_str)
+            combo_dur.setCurrentIndex(0)
         self.tabella.setCellWidget(row, _COL_DUR, combo_dur)
 
         self._valida_riga(row)
@@ -258,7 +324,9 @@ class DialogBulkPazienti(QDialog):
 
         self._aggiorna_stato()
 
-    def _on_cella_cambiata(self, row: int, _col: int):
+    def _on_cella_cambiata(self, row: int, col: int):
+        if col in (_COL_CODICE, _COL_INTERVENTO):
+            self._interventi_per_riga.pop(row, None)
         self._valida_riga(row)
 
     def _conta_righe_valide(self) -> int:
@@ -312,12 +380,12 @@ class DialogBulkPazienti(QDialog):
             if not nome or not cognome:
                 continue
 
-            def _txt(col):
-                it = self.tabella.item(row, col)
+            def _txt(col, _row=row):
+                it = self.tabella.item(_row, col)
                 return it.text().strip() if it else ""
 
-            def _combo(col):
-                w = self.tabella.cellWidget(row, col)
+            def _combo(col, _row=row):
+                w = self.tabella.cellWidget(_row, col)
                 return w.currentText() if w else ""
 
             durata_str = _combo(_COL_DUR)
@@ -326,16 +394,31 @@ class DialogBulkPazienti(QDialog):
             except (ValueError, IndexError):
                 durata = 90
 
-            codice = _txt(_COL_CODICE)
-            desc = _txt(_COL_INTERVENTO)
+            # Usa interventi salvati dal CSV; se rimossi (edit manuale) ricostruisce dalle celle
+            interventi = self._interventi_per_riga.get(row)
+            if not interventi:
+                codice = _txt(_COL_CODICE)
+                desc   = _txt(_COL_INTERVENTO)
+                codici   = [c.strip() for c in codice.split(";") if c.strip()]
+                descrizi = [d.strip() for d in desc.split(";")   if d.strip()]
+                n = max(len(codici), len(descrizi), 1)
+                while len(codici)   < n: codici.append("")
+                while len(descrizi) < n: descrizi.append("")
+                dur_each = max(durata // n, 1)
+                interventi = [
+                    {"codice": codici[i], "descrizione": descrizi[i], "durata": dur_each}
+                    for i in range(n)
+                ]
+
+            primo = interventi[0] if interventi else {}
 
             pazienti.append({
                 "nome":                   nome,
                 "cognome":                cognome,
                 "diagnosi":               _txt(_COL_DIAGNOSI),
-                "codice_intervento":      codice,
-                "descrizione_intervento": desc,
-                "interventi": [{"codice": codice, "descrizione": desc, "durata": durata}],
+                "codice_intervento":      primo.get("codice", ""),
+                "descrizione_intervento": primo.get("descrizione", ""),
+                "interventi":             interventi,
                 "durata_intervento":      durata,
                 "tipo_chirurgia":         _combo(_COL_TIPO),
                 "complessita":            _combo(_COL_CPX),

@@ -1,5 +1,6 @@
 import sys
 from PySide6.QtWidgets import QApplication, QMainWindow, QWidget, QHBoxLayout, QStackedWidget
+from PySide6.QtCore import QLoggingCategory
 
 from src.controllers.controller_sale_operatorie import ControllerSaleOperatorie
 from src.models.data_manager_sale_operatorie import DataManagerSaleOperatorie
@@ -114,6 +115,7 @@ class MainWindow(QMainWindow):
 
 if __name__ == "__main__":
     app = QApplication(sys.argv)
+    QLoggingCategory.setFilterRules("qt.qpa.wayland.textinput=false")
     app.setStyle("Fusion")
 
     window = MainWindow()

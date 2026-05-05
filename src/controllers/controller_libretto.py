@@ -1,4 +1,4 @@
-from datetime import date as _date
+from datetime import date as _date, timedelta as _td
 
 from PySide6.QtCore import Qt
 from PySide6.QtWidgets import QListWidgetItem, QMessageBox
@@ -165,26 +165,29 @@ class ControllerLibretto:
         for anno, mese in self.model_scad.get_mesi_disponibili():
             dati = self.model_scad.load_mese(anno, mese)
 
-            for data_str, assegnato in dati.get("giro_visite", {}).items():
+            for lun_str, assegnato in dati.get("giro_visite", {}).items():
                 if not self._nome_match(assegnato, nome_form):
                     continue
                 try:
-                    _date.fromisoformat(data_str)
+                    lun_date = _date.fromisoformat(lun_str)
                 except ValueError:
                     continue
-                if ("Reparto", "Giro Visite") in {(k[1], k[2]) for k in confirmed_keys if k[0] == data_str}:
-                    continue
-                result.append({
-                    "data":       data_str,
-                    "tipo":       "pianificata",
-                    "ora_inizio": "08:00",
-                    "ora_fine":   "18:00",
-                    "sede":       "Reparto",
-                    "attivita":   "Giro Visite",
-                    "intervento": "",
-                    "ruolo":      "Giro Visite",
-                    "note":       "",
-                })
+                # Il giro visite copre tutta la settimana lun–ven
+                for offset in range(5):
+                    data_str = (lun_date + _td(days=offset)).isoformat()
+                    if ("Reparto", "Giro Visite") in {(k[1], k[2]) for k in confirmed_keys if k[0] == data_str}:
+                        continue
+                    result.append({
+                        "data":       data_str,
+                        "tipo":       "pianificata",
+                        "ora_inizio": "08:00",
+                        "ora_fine":   "18:00",
+                        "sede":       "Reparto",
+                        "attivita":   "Giro Visite",
+                        "intervento": "",
+                        "ruolo":      "Giro Visite",
+                        "note":       "",
+                    })
 
             for data_str, turno in dati.get("turni", {}).items():
                 try:

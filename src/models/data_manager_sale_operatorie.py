@@ -213,7 +213,7 @@ class DataManagerSaleOperatorie:
                     continue
                 lun = d - dt.timedelta(days=d.weekday())
                 lun_str = lun.strftime("%Y-%m-%d")
-                        if lun.year == anno and lun.month == mese:
+                if lun.year == anno and lun.month == mese:
                     stato_sett = settimane_stati.get(lun_str, "BOZZA")
                 else:
                     lun_data = self.load_mese(lun.year, lun.month)
