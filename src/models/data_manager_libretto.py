@@ -2,6 +2,8 @@ import os
 import json
 from datetime import date as _date
 
+from src.models.id_generator import next_available_id
+
 class DataManagerLibretto:
     def __init__(self, dir_libretti="mock_data/libretti"):
         self.dir_libretti = dir_libretti
@@ -31,21 +33,26 @@ class DataManagerLibretto:
         return None
 
     def crea_nuovo_specializzando(self, dati_form):
-        file_esistenti = [f for f in os.listdir(self.dir_libretti) if f.endswith(".json")]
-        nuovo_id = f"SP{len(file_esistenti) + 1:03d}"
-        
         nuovo_specializzando = {
-            "id": nuovo_id,
+            "id": "",
             "matricola": dati_form["matricola"],
             "nome": dati_form["nome"],
             "cognome": dati_form["cognome"],
             "livello": dati_form["livello"],
-            "stato": dati_form["stato"]
+            "stato": dati_form["stato"],
         }
 
-        filepath = os.path.join(self.dir_libretti, f"{nuovo_id}.json")
-        with open(filepath, 'w', encoding='utf-8') as f:
-            json.dump(nuovo_specializzando, f, indent=4)
+        while True:
+            nuovo_id = next_available_id(self.dir_libretti, "SP", 3)
+            nuovo_specializzando["id"] = nuovo_id
+            filepath = os.path.join(self.dir_libretti, f"{nuovo_id}.json")
+            payload = json.dumps(nuovo_specializzando, indent=4)
+            try:
+                with open(filepath, 'x', encoding='utf-8') as f:
+                    f.write(payload)
+                break
+            except FileExistsError:
+                continue
 
         return nuovo_specializzando
 

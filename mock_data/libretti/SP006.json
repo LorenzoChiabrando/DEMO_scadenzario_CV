@@ -219,7 +219,7 @@
         {
             "data": "2026-05-15",
             "sede": "Molinette",
-            "attivita": "Attivit\u00e0 di Reparto",
+            "attivita": "Attività di Reparto",
             "ruolo": "Reparto I",
             "ora_inizio": "08:00",
             "ora_fine": "18:00",
@@ -230,7 +230,7 @@
         {
             "data": "2026-05-15",
             "sede": "Reparto",
-            "attivita": "Attivit\u00e0 di Reparto",
+            "attivita": "Attività di Reparto",
             "ruolo": "Reparto I",
             "descrizione": "test di conferma",
             "note": "test di conferma 2",

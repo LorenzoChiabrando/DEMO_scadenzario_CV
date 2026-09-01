@@ -1,4 +1,4 @@
-from datetime import date as _date
+from datetime import date as _date, timedelta as _td
 
 from PySide6.QtCore import Qt
 from PySide6.QtWidgets import QListWidgetItem, QMessageBox
@@ -76,7 +76,6 @@ class ControllerLibretto:
         self.view.imposta_dettaglio(spec)
         self._categoria_corrente = "completate"
         self._aggiorna_cache(spec)
-        self._aggiorna_score()
         self._aggiorna_tab_ui()
         self._popola_lista_attivita("completate")
         self.view.stacked_widget.setCurrentIndex(1)
@@ -116,7 +115,6 @@ class ControllerLibretto:
 
         for att in self.model.get_attivita(spec_id):
             slot  = att.get("slot", "")
-            # Preferisce ora_inizio/ora_fine diretti (nuovo formato); fallback su mappa legacy
             ora_i = att.get("ora_inizio") or _SLOT_TO_ORE.get(slot, ("08:00", "18:00"))[0]
             ora_f = att.get("ora_fine")   or _SLOT_TO_ORE.get(slot, ("08:00", "18:00"))[1]
             ruolo = att.get("ruolo", "")
@@ -165,26 +163,28 @@ class ControllerLibretto:
         for anno, mese in self.model_scad.get_mesi_disponibili():
             dati = self.model_scad.load_mese(anno, mese)
 
-            for data_str, assegnato in dati.get("giro_visite", {}).items():
+            for lun_str, assegnato in dati.get("giro_visite", {}).items():
                 if not self._nome_match(assegnato, nome_form):
                     continue
                 try:
-                    _date.fromisoformat(data_str)
+                    lun_date = _date.fromisoformat(lun_str)
                 except ValueError:
                     continue
-                if ("Reparto", "Giro Visite") in {(k[1], k[2]) for k in confirmed_keys if k[0] == data_str}:
-                    continue
-                result.append({
-                    "data":       data_str,
-                    "tipo":       "pianificata",
-                    "ora_inizio": "08:00",
-                    "ora_fine":   "18:00",
-                    "sede":       "Reparto",
-                    "attivita":   "Giro Visite",
-                    "intervento": "",
-                    "ruolo":      "Giro Visite",
-                    "note":       "",
-                })
+                for offset in range(5):
+                    data_str = (lun_date + _td(days=offset)).isoformat()
+                    if ("Reparto", "Giro Visite") in {(k[1], k[2]) for k in confirmed_keys if k[0] == data_str}:
+                        continue
+                    result.append({
+                        "data":       data_str,
+                        "tipo":       "pianificata",
+                        "ora_inizio": "08:00",
+                        "ora_fine":   "18:00",
+                        "sede":       "Reparto",
+                        "attivita":   "Giro Visite",
+                        "intervento": "",
+                        "ruolo":      "Giro Visite",
+                        "note":       "",
+                    })
 
             for data_str, turno in dati.get("turni", {}).items():
                 try:
@@ -198,7 +198,6 @@ class ControllerLibretto:
                         continue
                     if not self._nome_match(valore, nome_form):
                         continue
-                    # OR rows confirmed via attivita array → skip
                     if row_name in ("Sala Op. I", "Sala Op. II") and data_str in date_con_or:
                         continue
                     sede  = _ROW_SEDE.get(row_name, row_name)
@@ -280,12 +279,6 @@ class ControllerLibretto:
         n = len(giorni)
         self.view.lbl_n_attivita.setText(f"{n} {'giorni' if n != 1 else 'giorno'}")
         lista.blockSignals(False)
-
-    def _aggiorna_score(self):
-        n_int, score = self.model.calcola_training_score(self._spec_corrente["id"])
-        self.view.val_score.setText(
-            f"{score:.0f} pt  ·  {n_int} int." if n_int > 0 else "–"
-        )
 
     def _on_att_cliccata(self, item: QListWidgetItem):
         data = item.data(Qt.ItemDataRole.UserRole)

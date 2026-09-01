@@ -1,0 +1,57 @@
+{
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "$id": "scadenzario_ottimizzazione.schema.json",
+    "title": "Configurazione delle due sale operatorie",
+    "type": "object",
+    "required": ["modello_ottimizzazione"],
+    "properties": {
+        "modello_ottimizzazione": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["versione_schema", "sale_operatorie", "capacita_sessioni"],
+            "properties": {
+                "versione_schema": {"const": 1},
+                "sale_operatorie": {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "required": ["OR-1", "OR-2"],
+                    "properties": {
+                        "OR-1": {"$ref": "#/$defs/sala"},
+                        "OR-2": {"$ref": "#/$defs/sala"}
+                    }
+                },
+                "capacita_sessioni": {
+                    "type": "object",
+                    "propertyNames": {
+                        "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$"
+                    },
+                    "additionalProperties": {
+                        "type": "object",
+                        "additionalProperties": false,
+                        "properties": {
+                            "OR-1": {"type": "integer", "minimum": 1},
+                            "OR-2": {"type": "integer", "minimum": 1}
+                        }
+                    }
+                }
+            }
+        }
+    },
+    "$defs": {
+        "sala": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+                "riga_turno",
+                "ruolo_specializzando",
+                "capacita_minuti"
+            ],
+            "properties": {
+                "riga_turno": {"type": "string", "minLength": 1},
+                "ruolo_specializzando": {"type": "string", "minLength": 1},
+                "capacita_minuti": {"type": "integer", "minimum": 1}
+            }
+        }
+    },
+    "additionalProperties": true
+}

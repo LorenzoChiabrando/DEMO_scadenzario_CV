@@ -9,11 +9,13 @@ from PySide6.QtCore import Qt
 from PySide6.QtGui import QPixmap, QColor, QFont
 
 from src.views.components.colored_header_view import ColoredHeaderView
+from src.calendar_presentation import row_display_label
 
 
 _COLORI_RIGA = {
-    "Reparto I":    "#dbeafe",   # blue-100
-    "Reparto II":   "#dbeafe",   # blue-100
+    "Tipo Guardia": "#e0e7ff",   # indigo-100
+    "Reparto I":    "#e0e7ff",
+    "Reparto II":   "#e0e7ff",
     "Sala Op. I":   "#dcfce7",   # green-100
     "Sala Op. II":  "#dcfce7",   # green-100
     "Giro Visite":  "#fef9c3",   # yellow-100
@@ -24,8 +26,8 @@ _COLORI_RIGA = {
 _COLORI_HEADER = {
     "Giorno":       "#e2e8f0",   # slate-200
     "Tipo Guardia": "#c7d2fe",   # indigo-200
-    "Reparto I":    "#bfdbfe",   # blue-200
-    "Reparto II":   "#bfdbfe",
+    "Reparto I":    "#c7d2fe",
+    "Reparto II":   "#c7d2fe",
     "Sala Op. I":   "#bbf7d0",   # green-200
     "Sala Op. II":  "#bbf7d0",
     "Giro Visite":  "#fde68a",   # amber-200
@@ -44,6 +46,7 @@ class ViewScadenzario(QWidget):
     def __init__(self):
         super().__init__()
         self.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, True)
+        self._compact = False
 
         self.row_labels = [
             "Giorno", "Tipo Guardia", "Reparto I", "Reparto II",
@@ -202,9 +205,43 @@ class ViewScadenzario(QWidget):
         legenda.addStretch()
         layout.addLayout(legenda)
 
+        tools = QHBoxLayout()
+        tools.setSpacing(8)
+        lbl_vista = QLabel("Visualizzazione:")
+        lbl_vista.setObjectName("LblCalendarTools")
+        tools.addWidget(lbl_vista)
+
+        self.btn_vista_dettaglio = QPushButton("Dettaglio")
+        self.btn_vista_dettaglio.setObjectName("BtnCalendarTool")
+        self.btn_vista_dettaglio.setCheckable(True)
+        self.btn_vista_dettaglio.setChecked(True)
+        self.btn_vista_dettaglio.setCursor(Qt.CursorShape.PointingHandCursor)
+
+        self.btn_vista_mese = QPushButton("Intero mese")
+        self.btn_vista_mese.setObjectName("BtnCalendarTool")
+        self.btn_vista_mese.setCheckable(True)
+        self.btn_vista_mese.setCursor(Qt.CursorShape.PointingHandCursor)
+
+        self.lbl_dettaglio_cella = QLabel(
+            "Nella vista mensile fai click sulle iniziali per visualizzare il nome completo."
+        )
+        self.lbl_dettaglio_cella.setObjectName("LblCellDetail")
+
+        self.btn_esporta_pdf = QPushButton("Esporta PDF")
+        self.btn_esporta_pdf.setObjectName("BtnCalendarExport")
+        self.btn_esporta_pdf.setCursor(Qt.CursorShape.PointingHandCursor)
+
+        tools.addWidget(self.btn_vista_dettaglio)
+        tools.addWidget(self.btn_vista_mese)
+        tools.addWidget(self.lbl_dettaglio_cella, 1)
+        tools.addWidget(self.btn_esporta_pdf)
+        layout.addLayout(tools)
+
         self.tabella = QTableWidget()
         self.tabella.setRowCount(len(self.row_labels))
-        self.tabella.setVerticalHeaderLabels(self.row_labels)
+        self.tabella.setVerticalHeaderLabels(
+            [row_display_label(label) for label in self.row_labels]
+        )
 
         self.tabella.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.Fixed)
         self.tabella.horizontalHeader().setDefaultSectionSize(150)
@@ -302,10 +339,11 @@ class ViewScadenzario(QWidget):
 
     def crea_item_giorno(self, nome_giorno, is_festivo, is_oggi=False):
         """Item stilizzato per la riga-header del giorno (riga 0)."""
-        item = QTableWidgetItem(nome_giorno)
+        display_name = nome_giorno[:1] if self._compact else nome_giorno
+        item = QTableWidgetItem(display_name)
         item.setTextAlignment(Qt.AlignmentFlag.AlignCenter)
         item.setFlags(item.flags() & ~Qt.ItemFlag.ItemIsEditable)
-        item.setFont(QFont("Segoe UI", 11, QFont.Weight.Bold))
+        item.setFont(QFont("Segoe UI", 8 if self._compact else 11, QFont.Weight.Bold))
 
         if is_oggi and not is_festivo:
             item.setBackground(QColor("#f59e0b"))
@@ -323,6 +361,8 @@ class ViewScadenzario(QWidget):
         """Item stilizzato per una cella dati."""
         item = QTableWidgetItem(valore)
         item.setTextAlignment(Qt.AlignmentFlag.AlignCenter)
+        if valore and valore != "-":
+            item.setToolTip(valore)
 
         if is_festivo:
             item.setFlags(item.flags() & ~Qt.ItemFlag.ItemIsEditable)
@@ -338,12 +378,48 @@ class ViewScadenzario(QWidget):
 
             if nome_riga == "Tipo Guardia":
                 item.setForeground(QColor(_COLORI_GUARDIA.get(valore, "#1e293b")))
-                item.setFont(QFont("Segoe UI", 14, QFont.Weight.Bold))
+                item.setFont(
+                    QFont("Segoe UI", 7 if self._compact else 14, QFont.Weight.Bold)
+                )
             else:
                 item.setForeground(QColor("#1e293b"))
-                item.setFont(QFont("Segoe UI", 13, QFont.Weight.DemiBold))
+                font_size = 7 if self._compact else 13
+                item.setFont(QFont("Segoe UI", font_size, QFont.Weight.DemiBold))
 
         return item
+
+    def set_compact_mode(self, compact: bool) -> None:
+        self._compact = compact
+        self.tabella.setProperty("compact", compact)
+        self.tabella.style().unpolish(self.tabella)
+        self.tabella.style().polish(self.tabella)
+        self.btn_vista_mese.setChecked(compact)
+        self.btn_vista_dettaglio.setChecked(not compact)
+        self.tabella.setVerticalHeaderLabels(
+            [row_display_label(label, compact=compact) for label in self.row_labels]
+        )
+        header = self.tabella.horizontalHeader()
+        if compact:
+            header.setMinimumSectionSize(20)
+            header.setSectionResizeMode(QHeaderView.ResizeMode.Stretch)
+            self.tabella.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        else:
+            header.setMinimumSectionSize(60)
+            header.setSectionResizeMode(QHeaderView.ResizeMode.Fixed)
+            header.setDefaultSectionSize(150)
+            self.tabella.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
+        self.tabella.viewport().update()
+        header.viewport().update()
+
+    def mostra_dettaglio_assegnazione(
+        self,
+        giorno: str,
+        riga: str,
+        nome_completo: str,
+    ) -> None:
+        self.lbl_dettaglio_cella.setText(
+            f"{giorno} · {row_display_label(riga)}: {nome_completo or '—'}"
+        )
 
     def aggiorna_stile_cella(self, riga, colonna, valore, nome_riga, is_festivo, is_oggi=False):
         """Riapplica lo stile a una singola cella dopo che il suo valore è cambiato."""

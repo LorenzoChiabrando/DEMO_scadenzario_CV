@@ -2,9 +2,35 @@ import os
 import json
 from datetime import datetime
 
+from src.models.id_generator import next_available_id
+from src.planning_schema import OPTIMIZATION_KEY, default_patient_optimization
+
+
+def _diagnosis_fields(data: dict, existing: dict | None = None) -> tuple[str, str, str]:
+    previous = existing or {}
+    code = data.get("codice_diagnosi", previous.get("codice_diagnosi", ""))
+    description = data.get(
+        "descrizione_diagnosi",
+        previous.get("descrizione_diagnosi", ""),
+    )
+    legacy = data.get("diagnosi", previous.get("diagnosi", ""))
+    if not description:
+        description = legacy
+    summary = f"[{code}] {description}" if code else description
+    return str(code).strip(), str(description).strip(), str(summary).strip()
+
+
 class DataManagerPazienti:
-    def __init__(self, dir_pazienti="mock_data/pazienti"):
+    def __init__(
+        self,
+        dir_pazienti="mock_data/pazienti",
+        dir_libretti=None,
+    ):
         self.dir_pazienti = dir_pazienti
+        self.dir_libretti = dir_libretti or os.path.join(
+            os.path.dirname(os.path.abspath(dir_pazienti)),
+            "libretti",
+        )
         
         if not os.path.exists(self.dir_pazienti):
             os.makedirs(self.dir_pazienti, exist_ok=True)
@@ -24,20 +50,26 @@ class DataManagerPazienti:
         return sorted(pazienti, key=lambda x: x.get('cognome', ''))
 
     def crea_nuovo_paziente(self, dati_form):
-        file_esistenti = [f for f in os.listdir(self.dir_pazienti) if f.endswith(".json")]
-        nuovo_id = f"PZ{len(file_esistenti) + 1:04d}"
-        
         data_odierna = datetime.now().strftime("%d/%m/%Y")
+        codice_diagnosi, descrizione_diagnosi, diagnosi = _diagnosis_fields(dati_form)
 
         interventi = dati_form.get("interventi", [])
         primo = interventi[0] if interventi else {}
         durata_tot = sum(i.get("durata", 0) for i in interventi) or dati_form.get("durata_intervento", 90)
+        configurazione_modello = dati_form.get(OPTIMIZATION_KEY)
+        if configurazione_modello is None:
+            configurazione_modello = default_patient_optimization(
+                dati_form["urgenza"],
+                self._get_specializzandi_attivi_ids(),
+            )
 
         nuovo_paziente = {
-            "id": nuovo_id,
+            "id": "",
             "nome": dati_form["nome"],
             "cognome": dati_form["cognome"],
-            "diagnosi": dati_form.get("diagnosi", ""),
+            "codice_diagnosi": codice_diagnosi,
+            "descrizione_diagnosi": descrizione_diagnosi,
+            "diagnosi": diagnosi,
             "interventi": interventi,
             "codice_intervento": primo.get("codice", dati_form.get("codice_intervento", "")),
             "descrizione_intervento": primo.get("descrizione", dati_form.get("descrizione_intervento", "")),
@@ -48,11 +80,22 @@ class DataManagerPazienti:
             "stato": dati_form.get("stato", "In Attesa"),
             "data_inserimento": data_odierna,
             "note": dati_form.get("note", ""),
+            OPTIMIZATION_KEY: configurazione_modello,
         }
 
-        filepath = os.path.join(self.dir_pazienti, f"{nuovo_id}.json")
-        with open(filepath, 'w', encoding='utf-8') as f:
-            json.dump(nuovo_paziente, f, indent=4)
+        # Il massimo suffisso evita collisioni quando la sequenza contiene buchi.
+        while True:
+            nuovo_id = next_available_id(self.dir_pazienti, "PZ", 4)
+            nuovo_paziente["id"] = nuovo_id
+            filepath = os.path.join(self.dir_pazienti, f"{nuovo_id}.json")
+            payload = json.dumps(nuovo_paziente, indent=4)
+            try:
+                with open(filepath, 'x', encoding='utf-8') as f:
+                    f.write(payload)
+                break
+            except FileExistsError:
+                # Ricalcola l'ID in caso di scritture concorrenti.
+                continue
             
         return nuovo_paziente
 
@@ -88,11 +131,14 @@ class DataManagerPazienti:
         interventi = dati.get("interventi", paz.get("interventi", []))
         primo = interventi[0] if interventi else {}
         durata_tot = sum(i.get("durata", 0) for i in interventi) or dati.get("durata_intervento", paz.get("durata_intervento", 90))
+        codice_diagnosi, descrizione_diagnosi, diagnosi = _diagnosis_fields(dati, paz)
 
         paz.update({
             "nome": dati["nome"],
             "cognome": dati["cognome"],
-            "diagnosi": dati.get("diagnosi", paz.get("diagnosi", "")),
+            "codice_diagnosi": codice_diagnosi,
+            "descrizione_diagnosi": descrizione_diagnosi,
+            "diagnosi": diagnosi,
             "interventi": interventi,
             "codice_intervento": primo.get("codice", dati.get("codice_intervento", paz.get("codice_intervento", ""))),
             "descrizione_intervento": primo.get("descrizione", dati.get("descrizione_intervento", paz.get("descrizione_intervento", ""))),
@@ -103,9 +149,31 @@ class DataManagerPazienti:
             "stato": dati.get("stato", paz.get("stato", "In Attesa")),
             "note": dati.get("note", paz.get("note", "")),
         })
+        if OPTIMIZATION_KEY in dati:
+            paz[OPTIMIZATION_KEY] = dati[OPTIMIZATION_KEY]
         with open(filepath, 'w', encoding='utf-8') as f:
             json.dump(paz, f, indent=4)
         return paz
+
+    def _get_specializzandi_attivi_ids(self):
+        """Restituisce gli ID degli specializzandi attivi."""
+
+        if not os.path.exists(self.dir_libretti):
+            return []
+        resident_ids = []
+        for filename in sorted(os.listdir(self.dir_libretti)):
+            if not filename.endswith(".json"):
+                continue
+            filepath = os.path.join(self.dir_libretti, filename)
+            try:
+                with open(filepath, "r", encoding="utf-8") as stream:
+                    record = json.load(stream)
+            except (OSError, json.JSONDecodeError):
+                continue
+            resident_id = record.get("id")
+            if record.get("stato") == "Molinette" and isinstance(resident_id, str):
+                resident_ids.append(resident_id)
+        return resident_ids
 
     def aggiorna_stato_paziente(self, paz_id: str, stato: str):
         filepath = os.path.join(self.dir_pazienti, f"{paz_id}.json")

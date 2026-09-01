@@ -264,8 +264,9 @@ class ViewPazienti(QWidget):
         box_urg, self.val_urgenza   = self._crea_info_box("Classe di Urgenza", "-", accent=True)
         box_cpx, self.val_complessita = self._crea_info_box("Complessità", "-")
         box_dat, self.val_data      = self._crea_info_box("Data Inserimento", "-")
+        box_op, self.val_data_intervento = self._crea_info_box("Data Intervento", "-")
         box_sta, self.val_stato     = self._crea_info_box("Stato", "-")
-        for box in [box_urg, box_cpx, box_dat, box_sta]:
+        for box in [box_urg, box_cpx, box_dat, box_op, box_sta]:
             info_row.addWidget(box)
         cd.addLayout(info_row)
 
@@ -292,7 +293,8 @@ class ViewPazienti(QWidget):
             cd.addLayout(row)
             return lbl_v
 
-        self.val_diagnosi   = _riga_clinica("Diagnosi")
+        self.val_codice_diagnosi = _riga_clinica("Codice ICD-9-CM")
+        self.val_diagnosi   = _riga_clinica("Descrizione Diagnosi")
         self.val_intervento = _riga_clinica("Intervento")
         self.val_tipo       = _riga_clinica("Tipo Chirurgia")
 
@@ -377,10 +379,17 @@ class ViewPazienti(QWidget):
         item.setSizeHint(QSize(0, 68))
         return item, widget
 
-    def imposta_dettaglio(self, paz):
+    def imposta_dettaglio(
+        self,
+        paz,
+        *,
+        stato_effettivo: str | None = None,
+        data_intervento: str | None = None,
+    ):
         self.lbl_cognome_paziente.setText(paz.get("cognome", "").upper())
         self.lbl_nome_proprio_paziente.setText(paz.get("nome", ""))
         self.val_data.setText(paz.get("data_inserimento", "N/D"))
+        self.val_data_intervento.setText(data_intervento or "Non pianificata")
 
         cpx = paz.get("complessita", "")
         _COLORI_CPX = {
@@ -405,7 +414,7 @@ class ViewPazienti(QWidget):
             f"border:1.5px solid {fg}60;"
         )
 
-        stato = paz.get("stato", "In Attesa")
+        stato = stato_effettivo or paz.get("stato", "In Attesa")
         self.val_stato.setText(stato if stato else "–")
         bg2, fg2 = _COLORI_STATO.get(stato, ("#f1f5f9", "#475569"))
         self.val_stato.setStyleSheet(
@@ -414,7 +423,10 @@ class ViewPazienti(QWidget):
             f"border:1.5px solid {fg2}60;"
         )
 
-        self.val_diagnosi.setText(paz.get("diagnosi", "") or "—")
+        self.val_codice_diagnosi.setText(paz.get("codice_diagnosi", "") or "—")
+        self.val_diagnosi.setText(
+            paz.get("descrizione_diagnosi", "") or paz.get("diagnosi", "") or "—"
+        )
 
         interventi_list = paz.get("interventi", [])
         if interventi_list:

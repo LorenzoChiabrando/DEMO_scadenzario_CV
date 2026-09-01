@@ -55,7 +55,12 @@ class DialogNuovoSpecializzando(QDialog):
             ("Matricola *",       "input_matricola", False, None),
             ("Nome *",            "input_nome",      False, None),
             ("Cognome *",         "input_cognome",   False, None),
-            ("Livello Formativo", "combo_livello",   True,  ["Junior", "Senior"]),
+            (
+                "Livello Formativo",
+                "combo_livello",
+                True,
+                ["Junior", "Intermediate", "Senior"],
+            ),
             ("Sede Attuale",      "combo_stato",     True,  ["Molinette", "Altra Sede", "Storico"]),
         ]
 

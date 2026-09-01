@@ -2,6 +2,8 @@ import json
 import os
 from datetime import datetime
 
+from src.planning_schema import OPTIMIZATION_KEY, default_schedule_optimization
+
 class DataManager:
     def __init__(self, dir_scadenzario="mock_data/scadenzario",
                  dir_libretti="mock_data/libretti"):
@@ -30,7 +32,8 @@ class DataManager:
         else:
             data = {
                 "metadata": {"stato": "BOZZA"},
-                "turni": {}
+                "turni": {},
+                OPTIMIZATION_KEY: default_schedule_optimization(),
             }
             
         self._cached_anno = anno
@@ -68,6 +71,13 @@ class DataManager:
                 nome_formattato = f"{spec['cognome']} {spec['nome'][0]}."
                 attivi.append(nome_formattato)
         return attivi
+
+    def get_nome_completo_specializzando(self, nome_formattato: str) -> str:
+        """Ricava il nome completo dall'anagrafica locale."""
+
+        from src.calendar_presentation import resolve_resident_name
+
+        return resolve_resident_name(nome_formattato, self.specializzandi)
 
     def get_valore_cella(self, data_str, nome_riga):
         anno = int(data_str[:4])

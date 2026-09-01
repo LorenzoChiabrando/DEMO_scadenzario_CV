@@ -129,6 +129,33 @@ QPushButton#btnMeseAnno:hover {
     background-color: #e0e7ff;
 }
 
+QPushButton#BtnCalendarTool,
+QPushButton#BtnCalendarExport {
+    min-height: 30px;
+    padding: 0 12px;
+    border-radius: 7px;
+    border: 1px solid #cbd5e1;
+    background: #ffffff;
+    color: #475569;
+    font-weight: bold;
+}
+QPushButton#BtnCalendarTool:checked {
+    background: #4338ca;
+    color: #ffffff;
+    border-color: #4338ca;
+}
+QPushButton#BtnCalendarExport:hover,
+QPushButton#BtnCalendarTool:hover {
+    border-color: #6366f1;
+    color: #3730a3;
+}
+QPushButton#BtnCalendarTool:checked:hover { color: #ffffff; }
+QLabel#LblCalendarTools,
+QLabel#LblCellDetail {
+    color: #64748b;
+    font-size: 12px;
+}
+
 /* =========================================
    BOTTONE CONVALIDA
 ========================================= */
@@ -183,6 +210,7 @@ QTableWidget {
     outline: 0;
 }
 QTableWidget::item { padding: 3px; }
+QTableWidget[compact="true"]::item { padding: 0px; }
 QTableWidget::item:selected {
     background-color: #e0e7ff;
     color: #3730a3;

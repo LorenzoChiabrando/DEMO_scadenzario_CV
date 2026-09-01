@@ -2,7 +2,7 @@
     "id": "PZ0055",
     "nome": "Pippo",
     "cognome": "VerdeScuro",
-    "diagnosi": "diagnosi be\u00f2la",
+    "diagnosi": "diagnosi beòla",
     "interventi": [
         {
             "codice": "39.14",
@@ -23,5 +23,18 @@
     "urgenza": "Alta",
     "stato": "In Attesa",
     "data_inserimento": "28/04/2026",
-    "note": "test"
+    "note": "test",
+    "modello_ottimizzazione": {
+        "versione_schema": 1,
+        "categoria_paper": "I'",
+        "attesa_massima_giorni": 30,
+        "specializzandi_abilitati": [
+            "SP001",
+            "SP002",
+            "SP003",
+            "SP005",
+            "SP006",
+            "SP007"
+        ]
+    }
 }

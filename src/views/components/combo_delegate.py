@@ -1,6 +1,8 @@
 from PySide6.QtWidgets import QStyledItemDelegate, QComboBox, QTableWidget
 from PySide6.QtCore import Qt, QTimer
 
+from src.calendar_presentation import person_initials
+
 
 class ComboBoxDelegate(QStyledItemDelegate):
     """Delegate semplice con lista statica (usato per Tipo Guardia)."""
@@ -47,6 +49,14 @@ class SmartComboBoxDelegate(QStyledItemDelegate):
         self.items = items
         self._items_set = set(items)   # lookup O(1)
         self.table = table
+        self._compact = False
+
+    def set_compact(self, compact: bool) -> None:
+        self._compact = compact
+
+    def displayText(self, value, locale):
+        text = str(value)
+        return person_initials(text) if self._compact else text
 
     def _item_effettivo(self, r, col):
         """
@@ -56,7 +66,7 @@ class SmartComboBoxDelegate(QStyledItemDelegate):
         item = self.table.item(r, col)
         if item is not None:
             return item
-        # Cerca a sinistra una cella con span che include col
+        # Gestisce anche le celle estese del giro visite.
         for c in range(col - 1, -1, -1):
             if self.table.columnSpan(r, c) + c > col:
                 return self.table.item(r, c)
@@ -66,8 +76,7 @@ class SmartComboBoxDelegate(QStyledItemDelegate):
         riga = index.row()
         colonna = index.column()
 
-        # Specializzandi già occupati in altre righe della stessa colonna
-        # (usa _item_effettivo per gestire le celle con span, es. Giro Visite)
+        # Esclude gli specializzandi già assegnati nella stessa giornata.
         usati = set()
         for r in range(self.table.rowCount()):
             if r == riga:
@@ -78,7 +87,7 @@ class SmartComboBoxDelegate(QStyledItemDelegate):
                 if val and val in self._items_set:
                     usati.add(val)
 
-        # Valore attuale della cella (deve sempre comparire nel combo)
+        # Il valore corrente deve restare selezionabile.
         valore_corrente = ""
         item_corrente = self.table.item(riga, colonna)
         if item_corrente:

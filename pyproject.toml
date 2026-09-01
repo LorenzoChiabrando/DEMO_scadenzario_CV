@@ -1,0 +1,29 @@
+[tool.pytest.ini_options]
+addopts = "-ra"
+pythonpath = ["."]
+testpaths = ["tests"]
+
+[tool.ruff]
+include = [
+    "src/models/id_generator.py",
+    "src/calendar_presentation.py",
+    "src/importers/**/*.py",
+    "src/exports/**/*.py",
+    "src/planning_schema.py",
+    "src/optimization/**/*.py",
+    "src/workers/**/*.py",
+    "scripts/migrate_platform_json_v1.py",
+    "tests/conftest.py",
+    "tests/controllers/**/*.py",
+    "tests/models/**/*.py",
+    "tests/importers/**/*.py",
+    "tests/exports/**/*.py",
+    "tests/optimization/**/*.py",
+    "tests/workers/**/*.py",
+    "tests/views/**/*.py",
+]
+line-length = 100
+target-version = "py310"
+
+[tool.ruff.lint]
+select = ["B", "E", "F", "I", "SIM", "UP"]

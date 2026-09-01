@@ -38,8 +38,32 @@ class ControllerPazienti:
         if not paz:
             return
         self._paz_corrente = paz
-        self.view.imposta_dettaglio(paz)
+        stato, data_intervento = self._stato_e_data_intervento(paz)
+        self.view.imposta_dettaglio(
+            paz,
+            stato_effettivo=stato,
+            data_intervento=data_intervento,
+        )
         self.view.stacked_widget.setCurrentIndex(1)
+
+    def _pianificazioni(self) -> dict:
+        if not self.model_sale_op:
+            return {}
+        getter = getattr(self.model_sale_op, "get_pianificazioni_pazienti", None)
+        if getter is not None:
+            return getter()
+        return {
+            patient_id: ()
+            for patient_id in self.model_sale_op.get_pazienti_pianificati_ids()
+        }
+
+    def _stato_e_data_intervento(self, paz: dict) -> tuple[str, str | None]:
+        stato = paz.get("stato", "In Attesa")
+        dates = self._pianificazioni().get(paz.get("id"), ())
+        if stato == "In Attesa" and dates:
+            stato = "Pianificato"
+        data_intervento = dates[0].strftime("%d/%m/%Y") if dates else None
+        return stato, data_intervento
 
     def torna_alla_lista(self):
         self._paz_corrente = None
@@ -52,10 +76,7 @@ class ControllerPazienti:
         testo = self.view.search_bar.text().lower().strip()
         termini = testo.split() if testo else []
 
-        pianificati_ids = (
-            self.model_sale_op.get_pazienti_pianificati_ids()
-            if self.model_sale_op else set()
-        )
+        pianificazioni = self._pianificazioni()
 
         urgenze = []
         if self.view.chk_urg_alta.isChecked():
@@ -78,7 +99,7 @@ class ControllerPazienti:
 
         for paz in tutti:
             paz_stato_base = paz.get("stato", "In Attesa")
-            if paz_stato_base == "In Attesa" and paz.get("id") in pianificati_ids:
+            if paz_stato_base == "In Attesa" and paz.get("id") in pianificazioni:
                 paz_stato = "Pianificato"
             else:
                 paz_stato = paz_stato_base
@@ -174,7 +195,12 @@ class ControllerPazienti:
             )
             if aggiornato:
                 self._paz_corrente = aggiornato
-                self.view.imposta_dettaglio(aggiornato)
+                stato, data_intervento = self._stato_e_data_intervento(aggiornato)
+                self.view.imposta_dettaglio(
+                    aggiornato,
+                    stato_effettivo=stato,
+                    data_intervento=data_intervento,
+                )
             self.aggiorna_lista()
 
     def elimina_paziente(self):

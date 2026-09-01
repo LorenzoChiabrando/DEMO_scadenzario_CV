@@ -1,5 +1,6 @@
 import sys
 from PySide6.QtWidgets import QApplication, QMainWindow, QWidget, QHBoxLayout, QStackedWidget
+from PySide6.QtCore import QLoggingCategory
 
 from src.controllers.controller_sale_operatorie import ControllerSaleOperatorie
 from src.models.data_manager_sale_operatorie import DataManagerSaleOperatorie
@@ -106,14 +107,26 @@ class MainWindow(QMainWindow):
             model_pazienti=self.data_manager_pazienti,
             model_libretto=self.data_manager_libretto,
         )
+        self.controller_sale_operatorie.planning_busy_changed.connect(
+            self.sidebar.setDisabled
+        )
 
         self.body_stack.addWidget(self.view_scad)
         self.body_stack.addWidget(self.view_libretto)
         self.body_stack.addWidget(self.view_sale_operatorie)
         self.body_stack.addWidget(self.view_pazienti)
 
+    def closeEvent(self, event):
+        """Cooperatively stop an active optimization before closing Qt."""
+        controller = self.controller_sale_operatorie
+        if controller is not None and not controller.shutdown_planning():
+            event.ignore()
+            return
+        super().closeEvent(event)
+
 if __name__ == "__main__":
     app = QApplication(sys.argv)
+    QLoggingCategory.setFilterRules("qt.qpa.wayland.textinput=false")
     app.setStyle("Fusion")
 
     window = MainWindow()

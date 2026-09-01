@@ -18,6 +18,13 @@ class DataManagerSaleOperatorie:
         if not os.path.exists(self.dir_sale_operatorie):
             os.makedirs(self.dir_sale_operatorie, exist_ok=True)
 
+    def invalidate_cache(self):
+        """Force the next read to reload data written by an external planner."""
+
+        self._cached_anno = None
+        self._cached_mese = None
+        self._cached_data = None
+
     def _get_filepath(self, anno, mese):
         return os.path.join(self.dir_sale_operatorie, f"{anno:04d}-{mese:02d}.json")
 
@@ -189,10 +196,18 @@ class DataManagerSaleOperatorie:
         di settimane non ancora convalidate (stato BOZZA).
         Se exclude_lun_date è fornito, salta la settimana che inizia in quella data.
         """
-        ids = set()
+        return set(self.get_pianificazioni_pazienti(exclude_lun_date))
+
+    def get_pianificazioni_pazienti(
+        self,
+        exclude_lun_date: dt.date | None = None,
+    ) -> dict[str, tuple[dt.date, ...]]:
+        """Restituisce le date pianificate per ID paziente."""
+
+        dates_by_patient: dict[str, set[dt.date]] = {}
         exclude_str = exclude_lun_date.strftime("%Y-%m-%d") if exclude_lun_date else None
         if not os.path.exists(self.dir_sale_operatorie):
-            return ids
+            return {}
 
         for filename in os.listdir(self.dir_sale_operatorie):
             if not (filename.endswith(".json") and len(filename) == 12):
@@ -213,7 +228,7 @@ class DataManagerSaleOperatorie:
                     continue
                 lun = d - dt.timedelta(days=d.weekday())
                 lun_str = lun.strftime("%Y-%m-%d")
-                        if lun.year == anno and lun.month == mese:
+                if lun.year == anno and lun.month == mese:
                     stato_sett = settimane_stati.get(lun_str, "BOZZA")
                 else:
                     lun_data = self.load_mese(lun.year, lun.month)
@@ -224,12 +239,15 @@ class DataManagerSaleOperatorie:
                     continue
                 for op in turno.get("operazioni", []):
                     if op.get("id_paziente"):
-                        ids.add(op["id_paziente"])
+                        dates_by_patient.setdefault(op["id_paziente"], set()).add(d)
                 for key, val in turno.items():
                     if key not in ("operazioni", "specializzandi") and isinstance(val, dict) and val.get("id_paziente"):
-                        ids.add(val["id_paziente"])
+                        dates_by_patient.setdefault(val["id_paziente"], set()).add(d)
 
-        return ids
+        return {
+            patient_id: tuple(sorted(dates))
+            for patient_id, dates in sorted(dates_by_patient.items())
+        }
 
     def get_operazioni(self, data_str: str) -> list:
         anno = int(data_str[:4])

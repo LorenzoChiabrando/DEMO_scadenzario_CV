@@ -2,19 +2,257 @@ import os
 from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QPushButton,
     QTableWidget, QTableWidgetItem, QHeaderView, QScroller,
-    QStackedWidget, QLabel, QSizePolicy, QGraphicsDropShadowEffect, QFrame,
+    QStackedWidget, QLabel, QSizePolicy, QGraphicsDropShadowEffect,
+    QGraphicsOpacityEffect, QFrame, QApplication,
 )
-from PySide6.QtCore import Qt
-from PySide6.QtGui import QPixmap, QColor, QFont
+from PySide6.QtCore import QByteArray, QMimeData, Qt, Signal
+from PySide6.QtGui import QPixmap, QColor, QFont, QDrag, QPainter
+
+from src.calendar_presentation import person_initials
+
+
+_OPERATION_MIME_TYPE = "application/x-mmsd-operation"
+
+
+class DraggableOperationFrame(QFrame):
+    """Frame per un'operazione pianificata: supporta click (popup) e drag (sposta giorno)."""
+
+    def __init__(self):
+        super().__init__()
+        self._drag_start_pos = None
+        self._drag_col = -1
+        self._drag_op_idx = -1
+        self._can_drag = False
+        self._dragging = False
+        self._on_click = None
+
+    def setup_drag(self, col: int, op_idx: int, enabled: bool):
+        self._drag_col = col
+        self._drag_op_idx = op_idx
+        self._can_drag = enabled
+
+    def set_on_click(self, callback):
+        self._on_click = callback
+
+    def mousePressEvent(self, event):
+        if event.button() == Qt.MouseButton.LeftButton:
+            self._drag_start_pos = event.position().toPoint()
+            self._dragging = False
+        event.accept()
+
+    def mouseMoveEvent(self, event):
+        if (self._can_drag
+                and (event.buttons() & Qt.MouseButton.LeftButton)
+                and self._drag_start_pos is not None
+                and not self._dragging):
+            dist = (event.position().toPoint() - self._drag_start_pos).manhattanLength()
+            if dist >= QApplication.startDragDistance():
+                self._dragging = True
+                self._esegui_drag()
+        event.accept()
+
+    def mouseReleaseEvent(self, event):
+        if event.button() == Qt.MouseButton.LeftButton and not self._dragging:
+            if self._on_click:
+                self._on_click()
+        self._drag_start_pos = None
+        self._dragging = False
+        event.accept()
+
+    def _esegui_drag(self):
+        source_pix = self.grab()
+
+        dim = QGraphicsOpacityEffect()
+        dim.setOpacity(0.35)
+        self.setGraphicsEffect(dim)
+
+        ghost = QPixmap(source_pix.size())
+        ghost.fill(Qt.GlobalColor.transparent)
+        p = QPainter(ghost)
+        p.setOpacity(0.78)
+        p.drawPixmap(0, 0, source_pix)
+        p.end()
+
+        drag = QDrag(self)
+        mime = QMimeData()
+        payload = f"{self._drag_col}:{self._drag_op_idx}".encode("ascii")
+        mime.setData(_OPERATION_MIME_TYPE, QByteArray(payload))
+        drag.setMimeData(mime)
+        drag.setPixmap(ghost)
+        if self._drag_start_pos is not None:
+            drag.setHotSpot(self._drag_start_pos)
+
+        try:
+            drag.exec(Qt.DropAction.MoveAction)
+        finally:
+            # Dopo un drop valido il controller può aver ricreato il widget.
+            try:
+                self.setGraphicsEffect(None)
+            except RuntimeError:
+                pass
+
+
+class TabellaOperatorie(QTableWidget):
+    """QTableWidget con supporto drop: sposta tra giorni o scambia nello stesso giorno."""
+
+    operazione_spostata  = Signal(int, int, int)  # src_col, src_op_idx, dst_col
+    operazione_scambiata = Signal(int, int, int)  # col, src_op_idx, dst_op_idx
+
+    def __init__(self):
+        super().__init__()
+        self._drag_over_col = -1
+        self._drop_targets: dict = {}  # col → prima riga vuota (per move cross-giorno)
+        self.setAcceptDrops(True)
+        self.viewport().setAcceptDrops(True)
+
+        self._cell_overlay = QFrame(self.viewport())
+        self._cell_overlay.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents)
+        self._cell_overlay.hide()
+        self._cell_overlay_mode = ""  # "move" | "swap"
+
+    def set_drop_targets(self, targets: dict):
+        self._drop_targets = targets
+
+    def _decode_drag_payload(self, event) -> tuple[int, int] | None:
+        mime = event.mimeData()
+        if not mime.hasFormat(_OPERATION_MIME_TYPE):
+            return None
+        try:
+            raw = bytes(mime.data(_OPERATION_MIME_TYPE)).decode("ascii")
+            fields = raw.split(":")
+            if len(fields) != 2:
+                return None
+            src_col, src_op_idx = map(int, fields)
+        except (UnicodeDecodeError, ValueError):
+            return None
+
+        n_ops = self._drop_targets.get(src_col, 2) - 2
+        if not (0 <= src_col < self.columnCount() and 0 <= src_op_idx < n_ops):
+            return None
+        return src_col, src_op_idx
+
+    def _mostra_overlay(self, row: int, col: int, mode: str):
+        """Posiziona e mostra l'overlay sulla cella (row, col)."""
+        rect = self.visualRect(self.model().index(row, col))
+        if not rect.isValid() or rect.isEmpty():
+            self._cell_overlay.hide()
+            return
+        if mode != self._cell_overlay_mode:
+            self._cell_overlay_mode = mode
+            if mode == "swap":
+                self._cell_overlay.setStyleSheet(
+                    "background-color: rgba(234, 88, 12, 45);"
+                    "border: 2px dashed rgba(234, 88, 12, 200);"
+                    "border-radius: 6px;"
+                )
+            else:
+                self._cell_overlay.setStyleSheet(
+                    "background-color: rgba(59, 130, 246, 50);"
+                    "border: 2px dashed rgba(59, 130, 246, 210);"
+                    "border-radius: 6px;"
+                )
+        self._cell_overlay.setGeometry(rect.adjusted(3, 3, -3, -3))
+        self._cell_overlay.show()
+        self._cell_overlay.raise_()
+
+    def _aggiorna_overlay(self, col: int, src_col: int, src_op_idx: int, cursor_y: int):
+        if col < 0:
+            self._cell_overlay.hide()
+            return
+
+        if col == src_col:
+            target_row = self.rowAt(cursor_y)
+            src_row = src_op_idx + 2
+            n_ops = self._drop_targets.get(col, 2) - 2
+            if (target_row >= 2
+                    and target_row != src_row
+                    and (target_row - 2) < n_ops):
+                self._mostra_overlay(target_row, col, "swap")
+            else:
+                self._cell_overlay.hide()
+        else:
+            target_row = self._drop_targets.get(col, -1)
+            if target_row < 0 or target_row >= self.rowCount():
+                self._cell_overlay.hide()
+                return
+            self._mostra_overlay(target_row, col, "move")
+
+    def dragEnterEvent(self, event):
+        if self._decode_drag_payload(event) is None:
+            event.ignore()
+            return
+        event.setDropAction(Qt.DropAction.MoveAction)
+        event.accept()
+
+    def dragMoveEvent(self, event):
+        payload = self._decode_drag_payload(event)
+        if payload is None:
+            self._cell_overlay.hide()
+            event.ignore()
+            return
+        pos = event.position().toPoint()
+        col = self.columnAt(pos.x())
+        if not 0 <= col < self.columnCount():
+            self._cell_overlay.hide()
+            event.ignore()
+            return
+        src_col, src_op_idx = payload
+        self._drag_over_col = col
+        self._aggiorna_overlay(col, src_col, src_op_idx, pos.y())
+        event.setDropAction(Qt.DropAction.MoveAction)
+        event.accept()
+
+    def dragLeaveEvent(self, event):
+        self._drag_over_col = -1
+        self._cell_overlay.hide()
+        super().dragLeaveEvent(event)
+
+    def dropEvent(self, event):
+        self._drag_over_col = -1
+        self._cell_overlay.hide()
+        payload = self._decode_drag_payload(event)
+        if payload is None or not isinstance(event.source(), DraggableOperationFrame):
+            event.ignore()
+            return
+        src_col, src_idx = payload
+
+        pos = event.position().toPoint()
+        dst_col = self.columnAt(pos.x())
+        if not 0 <= dst_col < self.columnCount():
+            event.ignore()
+            return
+
+        accepted = False
+        if dst_col == src_col:
+            target_row = self.rowAt(pos.y())
+            n_ops = self._drop_targets.get(dst_col, 2) - 2
+            src_row = src_idx + 2
+            if (target_row >= 2
+                    and target_row != src_row
+                    and (target_row - 2) < n_ops):
+                self.operazione_scambiata.emit(dst_col, src_idx, target_row - 2)
+                accepted = True
+        else:
+            target_row = self._drop_targets.get(dst_col, -1)
+            if 0 <= target_row < self.rowCount():
+                self.operazione_spostata.emit(src_col, src_idx, dst_col)
+                accepted = True
+
+        if accepted:
+            event.setDropAction(Qt.DropAction.MoveAction)
+            event.accept()
+        else:
+            event.ignore()
 
 
 class ViewSaleOperatorie(QWidget):
     DEFAULT_OPS = 5   # righe operazione visibili di default
-    MAX_OPS = 12      # massimo assoluto per la crescita dinamica
+    MAX_OPS = 24      # 12 interventi per ciascuna delle due sale fisiche
 
     def __init__(self):
         super().__init__()
         self.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, True)
+        self._month_mode = False
 
         self.current_max_ops = self.DEFAULT_OPS
         self.row_labels = (
@@ -157,7 +395,39 @@ class ViewSaleOperatorie(QWidget):
 
         layout.addLayout(nav)
 
-        self.tabella = QTableWidget()
+        tools = QHBoxLayout()
+        tools.setSpacing(8)
+        lbl_vista = QLabel("Visualizzazione:")
+        lbl_vista.setObjectName("LblCalendarTools")
+        tools.addWidget(lbl_vista)
+
+        self.btn_vista_settimana = QPushButton("Settimana")
+        self.btn_vista_settimana.setObjectName("BtnCalendarTool")
+        self.btn_vista_settimana.setCheckable(True)
+        self.btn_vista_settimana.setChecked(True)
+        self.btn_vista_settimana.setCursor(Qt.CursorShape.PointingHandCursor)
+
+        self.btn_vista_mese = QPushButton("Intero mese")
+        self.btn_vista_mese.setObjectName("BtnCalendarTool")
+        self.btn_vista_mese.setCheckable(True)
+        self.btn_vista_mese.setCursor(Qt.CursorShape.PointingHandCursor)
+
+        self.lbl_dettaglio_cella = QLabel(
+            "La vista mensile usa le iniziali; fai click per aprire i dettagli."
+        )
+        self.lbl_dettaglio_cella.setObjectName("LblCellDetail")
+
+        self.btn_esporta_pdf = QPushButton("Esporta PDF")
+        self.btn_esporta_pdf.setObjectName("BtnCalendarExport")
+        self.btn_esporta_pdf.setCursor(Qt.CursorShape.PointingHandCursor)
+
+        tools.addWidget(self.btn_vista_settimana)
+        tools.addWidget(self.btn_vista_mese)
+        tools.addWidget(self.lbl_dettaglio_cella, 1)
+        tools.addWidget(self.btn_esporta_pdf)
+        layout.addLayout(tools)
+
+        self.tabella = TabellaOperatorie()
         self.tabella.setRowCount(2 + self.current_max_ops)
         self.tabella.setVerticalHeaderLabels(self.row_labels)
 
@@ -278,11 +548,14 @@ class ViewSaleOperatorie(QWidget):
         if n_display != self.current_max_ops:
             self.current_max_ops = n_display
             self.tabella.setRowCount(n_display + 2)
-            labels = ["Giorno", "Specializzandi"] + [f"Op. {i+1}" for i in range(n_display)]
+            specialist_label = "Spec." if self._month_mode else "Specializzandi"
+            labels = ["Giorno", specialist_label] + [f"Op. {i+1}" for i in range(n_display)]
             self.tabella.setVerticalHeaderLabels(labels)
-            for i in range(2, n_display + 2):
-                if self.tabella.rowHeight(i) == 0:
-                    self.tabella.setRowHeight(i, 82)
+        operation_height = 38 if self._month_mode else 82
+        self.tabella.setRowHeight(0, 34 if self._month_mode else 46)
+        self.tabella.setRowHeight(1, 44 if self._month_mode else 60)
+        for i in range(2, n_display + 2):
+            self.tabella.setRowHeight(i, operation_height)
 
         self._adatta_altezza_tabella()
 
@@ -302,10 +575,12 @@ class ViewSaleOperatorie(QWidget):
         self.tabella.setMaximumHeight(16777215)
 
     def crea_item_giorno(self, nome_giorno, is_festivo, is_oggi=False):
-        item = QTableWidgetItem(nome_giorno)
+        display_name = nome_giorno[:1] if self._month_mode else nome_giorno
+        item = QTableWidgetItem(display_name)
         item.setTextAlignment(Qt.AlignmentFlag.AlignCenter)
         item.setFlags(item.flags() & ~Qt.ItemFlag.ItemIsEditable)
-        item.setFont(QFont("Segoe UI", 11, QFont.Weight.Bold))
+        item.setFont(QFont("Segoe UI", 7 if self._month_mode else 11, QFont.Weight.Bold))
+        item.setToolTip(nome_giorno)
 
         if is_oggi:
             item.setBackground(QColor("#f59e0b"))
@@ -318,9 +593,17 @@ class ViewSaleOperatorie(QWidget):
             item.setForeground(QColor("#475569"))
         return item
 
-    def crea_item_cella(self, valore, is_inattivo, is_oggi=False):
-        item = QTableWidgetItem(valore)
+    def crea_item_cella(self, valore, is_inattivo, is_oggi=False, compact=False):
+        display_value = valore
+        if compact and valore:
+            display_value = "\n".join(
+                person_initials(line) for line in valore.splitlines() if line.strip()
+            )
+        item = QTableWidgetItem(display_value)
         item.setTextAlignment(Qt.AlignmentFlag.AlignCenter)
+        item.setData(Qt.ItemDataRole.UserRole, valore)
+        if valore:
+            item.setToolTip(valore)
 
         if is_inattivo:
             item.setFlags(item.flags() & ~Qt.ItemFlag.ItemIsEditable)
@@ -333,10 +616,38 @@ class ViewSaleOperatorie(QWidget):
             item.setFont(QFont("Segoe UI", 10, QFont.Weight.DemiBold))
         return item
 
-    def crea_widget_operazione(self, op: dict, is_oggi: bool = False, on_click=None) -> QFrame:
-        frame = QFrame()
+    def crea_widget_operazione(self, op: dict, is_oggi: bool = False, on_click=None,
+                               draggable: bool = False, col: int = -1,
+                               op_idx: int = -1,
+                               compact: bool = False) -> DraggableOperationFrame:
+        frame = DraggableOperationFrame()
         frame.setObjectName("CellaOperazioneOggi" if is_oggi else "CellaOperazione")
         frame.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, True)
+
+        if compact:
+            layout = QVBoxLayout(frame)
+            layout.setContentsMargins(1, 1, 1, 1)
+            compact_name = person_initials(op.get("nome_paziente", "")) or "-"
+            label = QLabel(compact_name)
+            label.setObjectName("LblCompactOp")
+            label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+            label.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents, True)
+            layout.addWidget(label)
+            details = " · ".join(
+                value
+                for value in (
+                    op.get("nome_paziente", ""),
+                    op.get("sala_operatoria", ""),
+                    f"{op.get('ora_inizio', '')}-{op.get('ora_fine', '')}".strip("-"),
+                )
+                if value
+            )
+            frame.setToolTip(details)
+            frame.set_on_click(on_click)
+            frame.setup_drag(col, op_idx, False)
+            if on_click:
+                frame.setCursor(Qt.CursorShape.PointingHandCursor)
+            return frame
 
         vl = QVBoxLayout(frame)
         vl.setContentsMargins(10, 6, 10, 6)
@@ -347,6 +658,12 @@ class ViewSaleOperatorie(QWidget):
         lbl_ora = QLabel(f"{op.get('ora_inizio','?')} – {op.get('ora_fine','?')}")
         lbl_ora.setObjectName("LblOraOp")
         lbl_ora.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents, True)
+        room_id = op.get("sala_operatoria", "")
+        if room_id:
+            badge_room = QLabel(room_id)
+            badge_room.setObjectName("BadgeSalaOp")
+            badge_room.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents, True)
+            ora_row.addWidget(badge_room)
         badge_dur = QLabel(f"{op.get('durata', '?')} min")
         badge_dur.setObjectName("BadgeDurataOp")
         badge_dur.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents, True)
@@ -364,8 +681,13 @@ class ViewSaleOperatorie(QWidget):
         interventi_list = op.get("interventi", [])
         codici = [i.get("codice", "") for i in interventi_list if i.get("codice")]
         codici_text = "  ·  ".join(codici) if codici else op.get("codice_intervento", "")
+        references = []
+        if op.get("id_paziente"):
+            references.append(f"ID: {op.get('id_paziente')}")
         if codici_text:
-            lbl_codici = QLabel(codici_text)
+            references.append(f"ICD-9: {codici_text}")
+        if references:
+            lbl_codici = QLabel("  ·  ".join(references))
             lbl_codici.setObjectName("LblSubOp")
             lbl_codici.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents, True)
             bottom_row.addWidget(lbl_codici)
@@ -383,11 +705,39 @@ class ViewSaleOperatorie(QWidget):
         vl.addWidget(lbl_nome)
         vl.addLayout(bottom_row)
 
-        if on_click:
+        frame.set_on_click(on_click)
+        frame.setup_drag(col, op_idx, draggable)
+        if on_click or draggable:
             frame.setCursor(Qt.CursorShape.PointingHandCursor)
-            frame.mousePressEvent = lambda e: on_click()
 
         return frame
+
+    def set_month_mode(self, month_mode: bool) -> None:
+        self._month_mode = month_mode
+        self.tabella.setProperty("compact", month_mode)
+        self.tabella.style().unpolish(self.tabella)
+        self.tabella.style().polish(self.tabella)
+        self.btn_vista_mese.setChecked(month_mode)
+        self.btn_vista_settimana.setChecked(not month_mode)
+        header = self.tabella.horizontalHeader()
+        if month_mode:
+            header.setMinimumSectionSize(20)
+            header.setSectionResizeMode(QHeaderView.ResizeMode.Stretch)
+            self.tabella.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+            labels = ["Giorno", "Spec."] + [
+                f"Op. {index + 1}" for index in range(self.current_max_ops)
+            ]
+        else:
+            header.setMinimumSectionSize(80)
+            header.setSectionResizeMode(QHeaderView.ResizeMode.Stretch)
+            self.tabella.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
+            labels = ["Giorno", "Specializzandi"] + [
+                f"Op. {index + 1}" for index in range(self.current_max_ops)
+            ]
+        self.tabella.setVerticalHeaderLabels(labels)
+        self.adatta_righe_operazioni(self.current_max_ops)
+        self.tabella.viewport().update()
+        header.viewport().update()
 
     def crea_widget_vuoto(self, is_oggi: bool = False, on_click=None) -> QFrame:
         frame = QFrame()

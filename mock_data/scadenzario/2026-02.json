@@ -133,5 +133,21 @@
             "Sala Op. II": "Massima A.",
             "Reparto I": "JAZZ B."
         }
+    },
+    "modello_ottimizzazione": {
+        "versione_schema": 1,
+        "sale_operatorie": {
+            "OR-1": {
+                "riga_turno": "Sala Op. I",
+                "ruolo_specializzando": "OR I",
+                "capacita_minuti": 600
+            },
+            "OR-2": {
+                "riga_turno": "Sala Op. II",
+                "ruolo_specializzando": "OR II",
+                "capacita_minuti": 600
+            }
+        },
+        "capacita_sessioni": {}
     }
 }

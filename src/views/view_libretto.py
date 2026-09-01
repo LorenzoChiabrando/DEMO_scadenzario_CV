@@ -12,6 +12,7 @@ from PySide6.QtGui import QColor, QPalette
 
 _COLORI_LIVELLO = {
     "Junior": ("#dbeafe", "#1d4ed8"),
+    "Intermediate": ("#dcfce7", "#15803d"),
     "Senior": ("#ede9fe", "#5b21b6"),
 }
 _COLORI_STATO = {
@@ -26,7 +27,20 @@ _MESI_ITA = ["Gennaio", "Febbraio", "Marzo", "Aprile", "Maggio", "Giugno",
 _DISPLAY_RUOLO = {
     "OR I":  "Sala Op. I",
     "OR II": "Sala Op. II",
+    "Reparto I": "I Reperibilità",
+    "Reparto II": "II Reperibilità",
 }
+_TAG_COLORS = {
+    "Sala Op. I":   ("#dbeafe", "#1d4ed8"),
+    "Sala Op. II":  ("#dbeafe", "#2563eb"),
+    "Giro Visite":  ("#d1fae5", "#065f46"),
+    "I Reperibilità":  ("#ffedd5", "#c2410c"),
+    "II Reperibilità": ("#ffedd5", "#c2410c"),
+    "Reparto":      ("#ffedd5", "#c2410c"),
+    "Day Hospital": ("#ede9fe", "#6d28d9"),
+    "Day Surgery":  ("#fce7f3", "#9d174d"),
+}
+_TAG_DEFAULT = ("#f1f5f9", "#475569")
 
 
 def _fmt_data(data_str: str) -> str:
@@ -45,6 +59,16 @@ def _day_summary(attivita_list: list) -> str:
         if display and display not in seen:
             seen.append(display)
     return "  ·  ".join(seen) if seen else "–"
+
+
+def _day_activity_tags(attivita_list: list) -> list[str]:
+    seen = []
+    for att in attivita_list:
+        ruolo = att.get("ruolo", "")
+        display = _DISPLAY_RUOLO.get(ruolo, ruolo) if ruolo else att.get("sede", "")
+        if display and display not in seen:
+            seen.append(display)
+    return seen or ["–"]
 
 
 def _day_ora(attivita_list: list) -> str:
@@ -259,8 +283,7 @@ class ViewLibretto(QWidget):
         box_mat, self.val_matricola = self._crea_info_box("Matricola", "-")
         box_liv, self.val_livello   = self._crea_info_box("Livello", "-")
         box_sta, self.val_stato     = self._crea_info_box("Stato", "-")
-        box_sco, self.val_score     = self._crea_info_box("Training Score", "–", accent=True)
-        for box in [box_mat, box_liv, box_sta, box_sco]:
+        for box in [box_mat, box_liv, box_sta]:
             info_row.addWidget(box)
         cd.addLayout(info_row)
 
@@ -343,6 +366,14 @@ class ViewLibretto(QWidget):
         sep.setFixedHeight(1)
         cd.addWidget(sep)
 
+        lbl_meta_help = QLabel(
+            "Orario e sede descrivono la giornata nel libretto e non confermano "
+            "le singole attività."
+        )
+        lbl_meta_help.setObjectName("SottoTitoloDialog")
+        lbl_meta_help.setWordWrap(True)
+        cd.addWidget(lbl_meta_help)
+
         meta_frame = QFrame()
         meta_frame.setObjectName("MetaGiornoFrame")
         meta_frame.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, True)
@@ -383,10 +414,13 @@ class ViewLibretto(QWidget):
         mf.addWidget(self.combo_meta_sede)
         mf.addStretch()
 
-        self.btn_salva_meta = QPushButton("Salva info giorno")
+        self.btn_salva_meta = QPushButton("Salva orario e sede")
         self.btn_salva_meta.setObjectName("BtnSalvaMeta")
         self.btn_salva_meta.setFixedHeight(34)
         self.btn_salva_meta.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.btn_salva_meta.setToolTip(
+            "Aggiorna soltanto l'orario complessivo e la sede della giornata."
+        )
         mf.addWidget(self.btn_salva_meta)
 
         self._on_save_meta_fn = None
@@ -430,14 +464,19 @@ class ViewLibretto(QWidget):
                 lbl.setMinimumWidth(min_w)
             hl.addWidget(lbl, stretch=stretch)
 
+        def _sep():
+            hl.addSpacing(8)
+            hl.addWidget(self._vsep())
+            hl.addSpacing(8)
+
         _h("GIORNO", stretch=2)
-        hl.addWidget(self._vsep())
-        _h("ORA", min_w=140, align=Qt.AlignmentFlag.AlignCenter)
-        hl.addWidget(self._vsep())
-        _h("SEDE", min_w=140, align=Qt.AlignmentFlag.AlignCenter)
-        hl.addWidget(self._vsep())
-        _h("ATTIVITÀ SVOLTE", stretch=2)
-        hl.addSpacing(110)  # space for badge + arrow
+        _sep()
+        _h("ORA", min_w=130, align=Qt.AlignmentFlag.AlignCenter)
+        _sep()
+        _h("SEDE", min_w=120, align=Qt.AlignmentFlag.AlignCenter)
+        _sep()
+        _h("ATTIVITÀ", stretch=3)
+        hl.addSpacing(90)  # room for badge + arrow
 
         item = QListWidgetItem()
         item.setFlags(Qt.ItemFlag.NoItemFlags)
@@ -447,7 +486,7 @@ class ViewLibretto(QWidget):
 
     def crea_item_giorno(self, data_str: str, attivita_list: list, meta: dict = None):
         label_txt = _fmt_data(data_str)
-        summary   = _day_summary(attivita_list)
+        tags      = _day_activity_tags(attivita_list)
         n         = len(attivita_list)
         n_txt     = f"{n} att."
 
@@ -467,35 +506,67 @@ class ViewLibretto(QWidget):
         hl.setSpacing(0)
         hl.setAlignment(Qt.AlignmentFlag.AlignVCenter)
 
+        def _sep():
+            hl.addSpacing(8)
+            hl.addWidget(self._vsep())
+            hl.addSpacing(8)
+
         lbl_data = QLabel(label_txt)
         lbl_data.setObjectName("ItemGiornoData")
         lbl_data.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents, True)
         hl.addWidget(lbl_data, stretch=2)
 
-        hl.addWidget(self._vsep())
+        _sep()
 
         lbl_ora = QLabel(ora_txt)
         lbl_ora.setObjectName("ItemGiornoOra")
-        lbl_ora.setMinimumWidth(140)
+        lbl_ora.setMinimumWidth(130)
         lbl_ora.setAlignment(Qt.AlignmentFlag.AlignCenter)
         lbl_ora.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents, True)
         hl.addWidget(lbl_ora)
 
-        hl.addWidget(self._vsep())
+        _sep()
 
         lbl_sede = QLabel(sede_txt)
         lbl_sede.setObjectName("ItemGiornoSede")
-        lbl_sede.setMinimumWidth(140)
+        lbl_sede.setMinimumWidth(120)
         lbl_sede.setAlignment(Qt.AlignmentFlag.AlignCenter)
         lbl_sede.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents, True)
         hl.addWidget(lbl_sede)
 
-        hl.addWidget(self._vsep())
+        _sep()
 
-        lbl_att = QLabel(summary)
-        lbl_att.setObjectName("ItemGiornoAttivita")
-        lbl_att.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents, True)
-        hl.addWidget(lbl_att, stretch=2)
+        tags_wrap = QWidget()
+        tags_wrap.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents, True)
+        tags_wrap.setStyleSheet("background: transparent;")
+        tags_layout = QHBoxLayout(tags_wrap)
+        tags_layout.setContentsMargins(0, 0, 0, 0)
+        tags_layout.setSpacing(6)
+        tags_layout.setAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter)
+
+        for tag in tags[:4]:
+            bg, fg = _TAG_COLORS.get(tag, _TAG_DEFAULT)
+            pill = QLabel(f"  {tag}  ")
+            pill.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents, True)
+            pill.setFixedHeight(22)
+            pill.setAlignment(Qt.AlignmentFlag.AlignCenter)
+            pill.setStyleSheet(
+                f"background:{bg}; color:{fg}; font-size:11px; font-weight:bold;"
+                f"border-radius:11px; border:1px solid {fg}30; padding:0 2px;"
+            )
+            tags_layout.addWidget(pill)
+        if len(tags) > 4:
+            extra = QLabel(f"+{len(tags) - 4}")
+            extra.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents, True)
+            extra.setFixedHeight(22)
+            extra.setAlignment(Qt.AlignmentFlag.AlignCenter)
+            extra.setStyleSheet(
+                "background:#f1f5f9; color:#475569; font-size:11px; font-weight:bold;"
+                "border-radius:11px; border:1px solid #cbd5e1; padding:0 6px;"
+            )
+            tags_layout.addWidget(extra)
+        tags_layout.addStretch()
+        hl.addWidget(tags_wrap, stretch=3)
 
         badge = QLabel(n_txt)
         badge.setObjectName("ItemGiornoBadge")
@@ -511,7 +582,7 @@ class ViewLibretto(QWidget):
         hl.addWidget(arrow)
 
         item = QListWidgetItem()
-        item.setSizeHint(QSize(0, 56))
+        item.setSizeHint(QSize(0, 62))
         item.setData(Qt.ItemDataRole.UserRole, {"data": data_str, "attivita": attivita_list})
         return item, widget
 

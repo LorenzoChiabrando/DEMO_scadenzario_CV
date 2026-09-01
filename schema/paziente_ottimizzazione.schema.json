@@ -1,0 +1,45 @@
+{
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "$id": "paziente_ottimizzazione.schema.json",
+    "title": "Campi di ottimizzazione del paziente",
+    "type": "object",
+    "required": ["modello_ottimizzazione"],
+    "properties": {
+        "modello_ottimizzazione": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+                "versione_schema",
+                "categoria_paper",
+                "attesa_massima_giorni",
+                "specializzandi_abilitati"
+            ],
+            "properties": {
+                "versione_schema": {"const": 1},
+                "categoria_paper": {"enum": ["I'", "I''", "I'''"]},
+                "attesa_massima_giorni": {
+                    "type": ["integer", "null"],
+                    "minimum": 1
+                },
+                "specializzandi_abilitati": {
+                    "type": "array",
+                    "items": {"type": "string", "minLength": 1},
+                    "uniqueItems": true
+                }
+            },
+            "allOf": [
+                {
+                    "if": {
+                        "properties": {"categoria_paper": {"const": "I'"}}
+                    },
+                    "then": {
+                        "properties": {
+                            "attesa_massima_giorni": {"type": "integer", "minimum": 1}
+                        }
+                    }
+                }
+            ]
+        }
+    },
+    "additionalProperties": true
+}

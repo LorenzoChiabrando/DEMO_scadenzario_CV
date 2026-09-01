@@ -11,5 +11,18 @@
     "stato": "Completato",
     "data_inserimento": "03/04/2026",
     "note": "Monitoraggio in corso",
-    "durata_intervento": 90
+    "durata_intervento": 90,
+    "modello_ottimizzazione": {
+        "versione_schema": 1,
+        "categoria_paper": "I'",
+        "attesa_massima_giorni": 60,
+        "specializzandi_abilitati": [
+            "SP001",
+            "SP002",
+            "SP003",
+            "SP005",
+            "SP006",
+            "SP007"
+        ]
+    }
 }

@@ -11,3 +11,9 @@ __pycache__/
 *.pyo
 *.pyd
 venv/
+.pytest_cache/
+.ruff_cache/
+tmp/
+*.lp
+*.mps
+.mmsd-planning.lock

@@ -2,6 +2,7 @@ import os
 from PySide6.QtWidgets import (
     QDialog, QWidget, QVBoxLayout, QHBoxLayout, QLabel, QFrame,
     QLineEdit, QComboBox, QPushButton, QMessageBox, QTextEdit, QScrollArea,
+    QSpinBox, QAbstractSpinBox,
 )
 from PySide6.QtCore import Qt
 
@@ -77,10 +78,20 @@ class DialogNuovoPaziente(QDialog):
         nome_cogn.addWidget(self._campo("COGNOME", "input_cognome", "Es. Ferretti"))
         layout.addLayout(nome_cogn)
 
-        layout.addWidget(self._campo(
-            "DIAGNOSI", "input_diagnosi",
-            "Es. Stenosi carotidea sintomatica bilaterale"
-        ))
+        diagnosi_row = QHBoxLayout()
+        diagnosi_row.setSpacing(12)
+        diagnosi_row.addWidget(
+            self._campo("CODICE ICD-9-CM", "input_codice_diagnosi", "Es. 433.10")
+        )
+        diagnosi_row.addWidget(
+            self._campo(
+                "DESCRIZIONE DIAGNOSI",
+                "input_descrizione_diagnosi",
+                "Es. Stenosi carotidea sintomatica",
+            ),
+            2,
+        )
+        layout.addLayout(diagnosi_row)
 
         grp_int = QVBoxLayout()
         grp_int.setSpacing(6)
@@ -95,7 +106,7 @@ class DialogNuovoPaziente(QDialog):
         for txt, w, stretch in [
             ("CODICE ICD-9", 100, 0),
             ("DESCRIZIONE", 0, 1),
-            ("DURATA", 110, 0),
+            ("DURATA [minuti]", 120, 0),
         ]:
             lbl = QLabel(txt)
             lbl.setObjectName("LblCampoSmall")
@@ -129,7 +140,7 @@ class DialogNuovoPaziente(QDialog):
         lbl_tipo.setObjectName("LblCampo")
         self.combo_tipo = QComboBox()
         self.combo_tipo.setObjectName("ComboDialog")
-        self.combo_tipo.addItems(["Aperta", "Endovascolare"])
+        self.combo_tipo.addItems(["Aperta", "Endovascolare", "Da classificare"])
         self.combo_tipo.setFixedHeight(44)
         grp_tipo.addWidget(lbl_tipo)
         grp_tipo.addWidget(self.combo_tipo)
@@ -140,7 +151,7 @@ class DialogNuovoPaziente(QDialog):
         lbl_cpx.setObjectName("LblCampo")
         self.combo_complessita = QComboBox()
         self.combo_complessita.setObjectName("ComboDialog")
-        self.combo_complessita.addItems(["Alta", "Media", "Bassa"])
+        self.combo_complessita.addItems(["Alta", "Media", "Bassa", "Da classificare"])
         self.combo_complessita.setFixedHeight(44)
         grp_cpx.addWidget(lbl_cpx)
         grp_cpx.addWidget(self.combo_complessita)
@@ -249,14 +260,15 @@ class DialogNuovoPaziente(QDialog):
         inp_desc.setText(descrizione)
         inp_desc.setFixedHeight(38)
 
-        combo_dur = QComboBox()
-        combo_dur.setObjectName("ComboDialog")
-        combo_dur.addItems(["30 min", "45 min", "60 min", "90 min",
-                            "120 min", "150 min", "180 min"])
-        combo_dur.setFixedHeight(38)
-        combo_dur.setFixedWidth(110)
-        idx = combo_dur.findText(f"{durata} min")
-        combo_dur.setCurrentIndex(idx if idx >= 0 else 3)
+        input_dur = QSpinBox()
+        input_dur.setObjectName("InputDialog")
+        input_dur.setRange(1, 1440)
+        input_dur.setValue(max(1, int(durata)))
+        input_dur.setButtonSymbols(QAbstractSpinBox.ButtonSymbols.NoButtons)
+        input_dur.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        input_dur.setFixedHeight(38)
+        input_dur.setFixedWidth(120)
+        input_dur.setToolTip("Durata dell'intervento espressa in minuti")
 
         btn_rm = QPushButton("−")
         btn_rm.setObjectName("BtnRimuoviIntervento")
@@ -265,14 +277,14 @@ class DialogNuovoPaziente(QDialog):
 
         hl.addWidget(inp_codice)
         hl.addWidget(inp_desc, 1)
-        hl.addWidget(combo_dur)
+        hl.addWidget(input_dur)
         hl.addWidget(btn_rm)
 
         row_data = {
             "frame": row_frame,
             "inp_codice": inp_codice,
             "inp_desc": inp_desc,
-            "combo_durata": combo_dur,
+            "input_durata": input_dur,
             "btn_rm": btn_rm,
         }
         btn_rm.clicked.connect(lambda: self._rimuovi_riga_intervento(row_data))
@@ -316,7 +328,12 @@ class DialogNuovoPaziente(QDialog):
 
         self.input_nome.setText(self._paz_dati.get("nome", ""))
         self.input_cognome.setText(self._paz_dati.get("cognome", ""))
-        self.input_diagnosi.setText(self._paz_dati.get("diagnosi", ""))
+        codice_diagnosi = self._paz_dati.get("codice_diagnosi", "")
+        descrizione_diagnosi = self._paz_dati.get("descrizione_diagnosi", "")
+        if not descrizione_diagnosi:
+            descrizione_diagnosi = self._paz_dati.get("diagnosi", "")
+        self.input_codice_diagnosi.setText(codice_diagnosi)
+        self.input_descrizione_diagnosi.setText(descrizione_diagnosi)
 
         for combo, field in [
             (self.combo_tipo, "tipo_chirurgia"),
@@ -333,11 +350,12 @@ class DialogNuovoPaziente(QDialog):
     def _valida_e_salva(self):
         nome = self.input_nome.text().strip()
         cognome = self.input_cognome.text().strip()
-        diagnosi = self.input_diagnosi.text().strip()
-        if not nome or not cognome or not diagnosi:
+        codice_diagnosi = self.input_codice_diagnosi.text().strip()
+        descrizione_diagnosi = self.input_descrizione_diagnosi.text().strip()
+        if not nome or not cognome or not codice_diagnosi or not descrizione_diagnosi:
             QMessageBox.warning(
                 self, "Campi Incompleti",
-                "Nome, Cognome e Diagnosi sono obbligatori."
+                "Nome, Cognome, Codice ICD-9-CM e Descrizione Diagnosi sono obbligatori."
             )
             return
         self.accept()
@@ -347,19 +365,26 @@ class DialogNuovoPaziente(QDialog):
         for row in self._interventi_rows:
             codice = row["inp_codice"].text().strip()
             desc = row["inp_desc"].text().strip()
-            try:
-                durata = int(row["combo_durata"].currentText().split()[0])
-            except (ValueError, IndexError):
-                durata = 90
+            durata = row["input_durata"].value()
             interventi.append({"codice": codice, "descrizione": desc, "durata": durata})
 
         durata_totale = sum(i["durata"] for i in interventi) if interventi else 90
         primo = interventi[0] if interventi else {}
 
+        codice_diagnosi = self.input_codice_diagnosi.text().strip()
+        descrizione_diagnosi = self.input_descrizione_diagnosi.text().strip()
+        diagnosi_legacy = (
+            f"[{codice_diagnosi}] {descrizione_diagnosi}"
+            if codice_diagnosi
+            else descrizione_diagnosi
+        )
+
         return {
             "nome": self.input_nome.text().strip(),
             "cognome": self.input_cognome.text().strip(),
-            "diagnosi": self.input_diagnosi.text().strip(),
+            "codice_diagnosi": codice_diagnosi,
+            "descrizione_diagnosi": descrizione_diagnosi,
+            "diagnosi": diagnosi_legacy,
             "interventi": interventi,
             "codice_intervento": primo.get("codice", ""),
             "descrizione_intervento": primo.get("descrizione", ""),
