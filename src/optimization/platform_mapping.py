@@ -246,7 +246,8 @@ def build_platform_context(
             raise PlatformDataError(f"patient {patient_id!r} has no procedure complexity")
         if complexity not in supported_complexities:
             raise PlatformDataError(
-                f"patient {patient_id!r} requires a supported procedure complexity"
+                f"patient {patient_id!r} requires a supported procedure complexity; "
+                "completare il campo Complessità nella scheda paziente"
             )
         waiting_time_days = None
         max_wait_days = None
@@ -258,7 +259,8 @@ def build_platform_context(
                 or max_wait_days <= 0
             ):
                 raise PlatformDataError(
-                    f"patient {patient_id!r} has an invalid maximum waiting time"
+                    f"patient {patient_id!r} has an invalid maximum waiting time; "
+                    "completare Urgenza o attesa_massima_giorni nella scheda paziente"
                 )
             inserted = _parse_platform_date(record.get("data_inserimento"), patient_id)
             waiting_time_days = (monday - inserted).days
@@ -434,6 +436,10 @@ def _build_operation_record(
         ).strip(),
         "id_paziente": patient.patient_id,
         "diagnosi": source_record.get("diagnosi", ""),
+        "codice_diagnosi": source_record.get("codice_diagnosi", ""),
+        "descrizione_diagnosi": source_record.get(
+            "descrizione_diagnosi", source_record.get("diagnosi", "")
+        ),
         "intervento": first_intervention.get("descrizione", ""),
         "codice_intervento": first_intervention.get("codice", ""),
         "interventi": interventions,

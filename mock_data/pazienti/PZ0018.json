@@ -2,27 +2,39 @@
     "id": "PZ0018",
     "nome": "Anna",
     "cognome": "Pellegrini",
-    "diagnosi": "Arteriopatia obliterante stadio III Leriche",
-    "codice_intervento": "39.25",
-    "descrizione_intervento": "Bypass aorto-bifemorale",
-    "tipo_chirurgia": "Aperta",
-    "complessita": "Alta",
-    "urgenza": "Media",
-    "stato": "Completato",
-    "data_inserimento": "26/04/2026",
-    "note": "",
+    "codice_diagnosi": "D018",
+    "descrizione_diagnosi": "Diagnosi sintetica 18",
+    "diagnosi": "[D018] Diagnosi sintetica 18",
+    "interventi": [
+        {
+            "codice": "DEMO-018",
+            "descrizione": "Procedura sintetica 18",
+            "durata": 90
+        }
+    ],
+    "codice_intervento": "DEMO-018",
+    "descrizione_intervento": "Procedura sintetica 18",
     "durata_intervento": 90,
+    "tipo_chirurgia": "Endovascolare",
+    "complessita": "Alta",
+    "urgenza": "Alta",
+    "stato": "In Attesa",
+    "data_inserimento": "30/07/2026",
+    "note": "Dati inventati per la demo.",
+    "dati_sintetici": true,
     "modello_ottimizzazione": {
         "versione_schema": 1,
         "categoria_paper": "I'",
-        "attesa_massima_giorni": 60,
+        "attesa_massima_giorni": 30,
         "specializzandi_abilitati": [
             "SP001",
             "SP002",
             "SP003",
+            "SP004",
             "SP005",
             "SP006",
-            "SP007"
+            "SP007",
+            "SP008"
         ]
     }
 }

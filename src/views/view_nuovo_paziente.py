@@ -6,12 +6,15 @@ from PySide6.QtWidgets import (
 )
 from PySide6.QtCore import Qt
 
+from src.patient_fields import DEFAULT_INTERVENTION_MINUTES, UNCLASSIFIED, normalize_diagnosis
+
 
 class DialogNuovoPaziente(QDialog):
     def __init__(self, parent=None, paziente_dati=None):
         super().__init__(parent)
         self._paz_dati = paziente_dati
         self._edit_mode = paziente_dati is not None
+        self._custom_durations = self._edit_mode
         self.setWindowTitle("Modifica Paziente" if self._edit_mode else "Nuovo Paziente")
         self.setMinimumWidth(620)
         self.setMinimumHeight(600)
@@ -23,6 +26,7 @@ class DialogNuovoPaziente(QDialog):
             self._precompila()
         else:
             self._aggiungi_riga_intervento()
+        self._mostra_dati_aggiuntivi(self._edit_mode)
         self.load_styles()
 
     def setup_ui(self):
@@ -60,9 +64,10 @@ class DialogNuovoPaziente(QDialog):
 
         lbl_sub = QLabel(
             "Modifica le informazioni del paziente." if self._edit_mode
-            else "Inserisci i dati del nuovo paziente in lista d'attesa."
+            else "Usa gli stessi dati del CSV. Solo Nome e Cognome sono obbligatori."
         )
         lbl_sub.setObjectName("SottoTitoloDialog")
+        lbl_sub.setWordWrap(True)
         layout.addWidget(lbl_sub)
 
         sep = QFrame()
@@ -74,24 +79,28 @@ class DialogNuovoPaziente(QDialog):
 
         nome_cogn = QHBoxLayout()
         nome_cogn.setSpacing(12)
-        nome_cogn.addWidget(self._campo("NOME", "input_nome", "Es. Giovanni"))
-        nome_cogn.addWidget(self._campo("COGNOME", "input_cognome", "Es. Ferretti"))
+        nome_cogn.addWidget(self._campo("NOME *", "input_nome", "Es. Giovanni"))
+        nome_cogn.addWidget(self._campo("COGNOME *", "input_cognome", "Es. Ferretti"))
         layout.addLayout(nome_cogn)
 
         diagnosi_row = QHBoxLayout()
         diagnosi_row.setSpacing(12)
         diagnosi_row.addWidget(
-            self._campo("CODICE ICD-9-CM", "input_codice_diagnosi", "Es. 433.10")
+            self._campo("CODICE ICD-9-CM", "input_codice_diagnosi", "Se disponibile")
         )
         diagnosi_row.addWidget(
             self._campo(
-                "DESCRIZIONE DIAGNOSI",
+                "DIAGNOSI ICD9 / DESCRIZIONE",
                 "input_descrizione_diagnosi",
                 "Es. Stenosi carotidea sintomatica",
             ),
             2,
         )
         layout.addLayout(diagnosi_row)
+        self.input_descrizione_diagnosi.setToolTip(
+            "Puoi incollare Diagnosi ICD9 dal CSV, anche con il codice fra parentesi. "
+            "Il codice separato e la descrizione non sono obbligatori."
+        )
 
         grp_int = QVBoxLayout()
         grp_int.setSpacing(6)
@@ -104,14 +113,16 @@ class DialogNuovoPaziente(QDialog):
         col_hdr.setContentsMargins(0, 0, 0, 0)
         col_hdr.setSpacing(8)
         for txt, w, stretch in [
-            ("CODICE ICD-9", 100, 0),
-            ("DESCRIZIONE", 0, 1),
+            ("CODICE INTERVENTO", 135, 0),
+            ("INTERVENTO / PROCEDURA ICD9", 0, 1),
             ("DURATA [minuti]", 120, 0),
         ]:
             lbl = QLabel(txt)
             lbl.setObjectName("LblCampoSmall")
             if w:
                 lbl.setFixedWidth(w)
+            if txt == "DURATA [minuti]":
+                self._duration_header = lbl
             col_hdr.addWidget(lbl, stretch=stretch)
         col_hdr.addSpacing(36)  # space for − button
         grp_int.addLayout(col_hdr)
@@ -131,6 +142,46 @@ class DialogNuovoPaziente(QDialog):
 
         layout.addLayout(grp_int)
 
+        grp_urg = QVBoxLayout()
+        grp_urg.setSpacing(4)
+        lbl_urg = QLabel("PRIORITÀ / URGENZA")
+        lbl_urg.setObjectName("LblCampo")
+        self.combo_urgenza = QComboBox()
+        self.combo_urgenza.setObjectName("ComboDialog")
+        self.combo_urgenza.addItems([UNCLASSIFIED, "Alta", "Media", "Bassa"])
+        self.combo_urgenza.setToolTip("CSV: classe A = Alta, B = Media, C/D = Bassa")
+        self.combo_urgenza.setFixedHeight(44)
+        grp_urg.addWidget(lbl_urg)
+        grp_urg.addWidget(self.combo_urgenza)
+        layout.addLayout(grp_urg)
+
+        self.lbl_durata = QLabel()
+        self.lbl_durata.setObjectName("SottoTitoloDialog")
+        self.lbl_durata.setWordWrap(True)
+        layout.addWidget(self.lbl_durata)
+
+        self.btn_dati_aggiuntivi = QPushButton("Mostra dati aggiuntivi (facoltativi)")
+        self.btn_dati_aggiuntivi.setObjectName("BtnAggiungiIntervento")
+        self.btn_dati_aggiuntivi.setCheckable(True)
+        self.btn_dati_aggiuntivi.setChecked(self._edit_mode)
+        self.btn_dati_aggiuntivi.setFixedHeight(34)
+        self.btn_dati_aggiuntivi.toggled.connect(self._mostra_dati_aggiuntivi)
+        layout.addWidget(self.btn_dati_aggiuntivi)
+
+        self.dati_aggiuntivi = QWidget()
+        extra_layout = QVBoxLayout(self.dati_aggiuntivi)
+        extra_layout.setContentsMargins(0, 0, 0, 0)
+        extra_layout.setSpacing(14)
+        layout.addWidget(self.dati_aggiuntivi)
+
+        lbl_extra = QLabel(
+            "Tipo chirurgia e complessità non sono presenti nel CSV TrackCare. "
+            "Puoi completarli in seguito; la complessità serve prima della pianificazione."
+        )
+        lbl_extra.setObjectName("SottoTitoloDialog")
+        lbl_extra.setWordWrap(True)
+        extra_layout.addWidget(lbl_extra)
+
         tipo_cpx = QHBoxLayout()
         tipo_cpx.setSpacing(12)
 
@@ -140,7 +191,7 @@ class DialogNuovoPaziente(QDialog):
         lbl_tipo.setObjectName("LblCampo")
         self.combo_tipo = QComboBox()
         self.combo_tipo.setObjectName("ComboDialog")
-        self.combo_tipo.addItems(["Aperta", "Endovascolare", "Da classificare"])
+        self.combo_tipo.addItems([UNCLASSIFIED, "Aperta", "Endovascolare"])
         self.combo_tipo.setFixedHeight(44)
         grp_tipo.addWidget(lbl_tipo)
         grp_tipo.addWidget(self.combo_tipo)
@@ -151,28 +202,14 @@ class DialogNuovoPaziente(QDialog):
         lbl_cpx.setObjectName("LblCampo")
         self.combo_complessita = QComboBox()
         self.combo_complessita.setObjectName("ComboDialog")
-        self.combo_complessita.addItems(["Alta", "Media", "Bassa", "Da classificare"])
+        self.combo_complessita.addItems([UNCLASSIFIED, "Alta", "Media", "Bassa"])
         self.combo_complessita.setFixedHeight(44)
         grp_cpx.addWidget(lbl_cpx)
         grp_cpx.addWidget(self.combo_complessita)
 
         tipo_cpx.addLayout(grp_tipo)
         tipo_cpx.addLayout(grp_cpx)
-        layout.addLayout(tipo_cpx)
-
-        urg_stato = QHBoxLayout()
-        urg_stato.setSpacing(12)
-
-        grp_urg = QVBoxLayout()
-        grp_urg.setSpacing(4)
-        lbl_urg = QLabel("CLASSE DI URGENZA")
-        lbl_urg.setObjectName("LblCampo")
-        self.combo_urgenza = QComboBox()
-        self.combo_urgenza.setObjectName("ComboDialog")
-        self.combo_urgenza.addItems(["Alta", "Media", "Bassa"])
-        self.combo_urgenza.setFixedHeight(44)
-        grp_urg.addWidget(lbl_urg)
-        grp_urg.addWidget(self.combo_urgenza)
+        extra_layout.addLayout(tipo_cpx)
 
         grp_sta = QVBoxLayout()
         grp_sta.setSpacing(4)
@@ -185,9 +222,7 @@ class DialogNuovoPaziente(QDialog):
         grp_sta.addWidget(lbl_sta)
         grp_sta.addWidget(self.combo_stato)
 
-        urg_stato.addLayout(grp_urg)
-        urg_stato.addLayout(grp_sta)
-        layout.addLayout(urg_stato)
+        extra_layout.addLayout(grp_sta)
 
         grp_note = QVBoxLayout()
         grp_note.setSpacing(4)
@@ -199,7 +234,7 @@ class DialogNuovoPaziente(QDialog):
         self.input_note.setFixedHeight(72)
         grp_note.addWidget(lbl_note)
         grp_note.addWidget(self.input_note)
-        layout.addLayout(grp_note)
+        extra_layout.addLayout(grp_note)
 
         btn_layout = QHBoxLayout()
         btn_layout.setSpacing(12)
@@ -238,7 +273,38 @@ class DialogNuovoPaziente(QDialog):
         grp_layout.addWidget(inp)
         return grp
 
-    def _aggiungi_riga_intervento(self, codice="", descrizione="", durata=90):
+    def _mostra_dati_aggiuntivi(self, visible: bool) -> None:
+        self.dati_aggiuntivi.setVisible(visible)
+        self._duration_header.setVisible(visible)
+        self.btn_dati_aggiuntivi.setText(
+            "Nascondi dati aggiuntivi" if visible else "Mostra dati aggiuntivi (facoltativi)"
+        )
+        for row in self._interventi_rows:
+            row["input_durata"].setVisible(visible)
+
+    def _aggiorna_durate(self) -> None:
+        count = len(self._interventi_rows)
+        if count and not self._custom_durations:
+            minutes, remainder = divmod(max(DEFAULT_INTERVENTION_MINUTES, count), count)
+            for index, row in enumerate(self._interventi_rows):
+                widget = row["input_durata"]
+                blocked = widget.blockSignals(True)
+                widget.setValue(minutes + (index < remainder))
+                widget.blockSignals(blocked)
+        total = sum(row["input_durata"].value() for row in self._interventi_rows)
+        self.lbl_durata.setText(
+            f"Durata totale: {total} minuti." if self._custom_durations
+            else f"Durata provvisoria: {total} minuti totali. "
+            "Puoi modificarla nei dati aggiuntivi."
+        )
+
+    def _durata_modificata(self) -> None:
+        self._custom_durations = True
+        self._aggiorna_durate()
+
+    def _aggiungi_riga_intervento(
+        self, codice="", descrizione="", durata=DEFAULT_INTERVENTION_MINUTES
+    ):
         row_frame = QFrame()
         row_frame.setObjectName("InterventiRow")
         row_frame.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, True)
@@ -252,7 +318,7 @@ class DialogNuovoPaziente(QDialog):
         inp_codice.setPlaceholderText("Es. 38.12")
         inp_codice.setText(codice)
         inp_codice.setFixedHeight(38)
-        inp_codice.setFixedWidth(100)
+        inp_codice.setFixedWidth(135)
 
         inp_desc = QLineEdit()
         inp_desc.setObjectName("InputDialog")
@@ -262,13 +328,15 @@ class DialogNuovoPaziente(QDialog):
 
         input_dur = QSpinBox()
         input_dur.setObjectName("InputDialog")
-        input_dur.setRange(1, 1440)
+        input_dur.setRange(1, 10080)
         input_dur.setValue(max(1, int(durata)))
         input_dur.setButtonSymbols(QAbstractSpinBox.ButtonSymbols.NoButtons)
         input_dur.setAlignment(Qt.AlignmentFlag.AlignCenter)
         input_dur.setFixedHeight(38)
         input_dur.setFixedWidth(120)
         input_dur.setToolTip("Durata dell'intervento espressa in minuti")
+        input_dur.setVisible(self.btn_dati_aggiuntivi.isChecked())
+        input_dur.valueChanged.connect(self._durata_modificata)
 
         btn_rm = QPushButton("−")
         btn_rm.setObjectName("BtnRimuoviIntervento")
@@ -292,6 +360,7 @@ class DialogNuovoPaziente(QDialog):
         self._interventi_rows.append(row_data)
         self._interventi_layout.addWidget(row_frame)
         self._aggiorna_btn_rimuovi()
+        self._aggiorna_durate()
 
     def _rimuovi_riga_intervento(self, row_data):
         if len(self._interventi_rows) <= 1:
@@ -300,6 +369,7 @@ class DialogNuovoPaziente(QDialog):
         row_data["frame"].setParent(None)
         row_data["frame"].deleteLater()
         self._aggiorna_btn_rimuovi()
+        self._aggiorna_durate()
 
     def _aggiorna_btn_rimuovi(self):
         solo = len(self._interventi_rows) == 1
@@ -328,10 +398,10 @@ class DialogNuovoPaziente(QDialog):
 
         self.input_nome.setText(self._paz_dati.get("nome", ""))
         self.input_cognome.setText(self._paz_dati.get("cognome", ""))
-        codice_diagnosi = self._paz_dati.get("codice_diagnosi", "")
-        descrizione_diagnosi = self._paz_dati.get("descrizione_diagnosi", "")
-        if not descrizione_diagnosi:
-            descrizione_diagnosi = self._paz_dati.get("diagnosi", "")
+        codice_diagnosi, descrizione_diagnosi, _ = normalize_diagnosis(
+            self._paz_dati.get("codice_diagnosi", ""),
+            self._paz_dati.get("descrizione_diagnosi", self._paz_dati.get("diagnosi", "")),
+        )
         self.input_codice_diagnosi.setText(codice_diagnosi)
         self.input_descrizione_diagnosi.setText(descrizione_diagnosi)
 
@@ -350,12 +420,10 @@ class DialogNuovoPaziente(QDialog):
     def _valida_e_salva(self):
         nome = self.input_nome.text().strip()
         cognome = self.input_cognome.text().strip()
-        codice_diagnosi = self.input_codice_diagnosi.text().strip()
-        descrizione_diagnosi = self.input_descrizione_diagnosi.text().strip()
-        if not nome or not cognome or not codice_diagnosi or not descrizione_diagnosi:
+        if not nome or not cognome:
             QMessageBox.warning(
                 self, "Campi Incompleti",
-                "Nome, Cognome, Codice ICD-9-CM e Descrizione Diagnosi sono obbligatori."
+                "Nome e Cognome sono obbligatori, come nell'inserimento da CSV."
             )
             return
         self.accept()
@@ -371,12 +439,8 @@ class DialogNuovoPaziente(QDialog):
         durata_totale = sum(i["durata"] for i in interventi) if interventi else 90
         primo = interventi[0] if interventi else {}
 
-        codice_diagnosi = self.input_codice_diagnosi.text().strip()
-        descrizione_diagnosi = self.input_descrizione_diagnosi.text().strip()
-        diagnosi_legacy = (
-            f"[{codice_diagnosi}] {descrizione_diagnosi}"
-            if codice_diagnosi
-            else descrizione_diagnosi
+        codice_diagnosi, descrizione_diagnosi, diagnosi_legacy = normalize_diagnosis(
+            self.input_codice_diagnosi.text(), self.input_descrizione_diagnosi.text()
         )
 
         return {

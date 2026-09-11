@@ -109,7 +109,7 @@ class ControllerPazienti:
             elif paz_stato == "Pianificato":
                 n_pianificati += 1
 
-            if paz.get("urgenza") not in urgenze:
+            if paz.get("urgenza") not in urgenze and paz.get("urgenza") != "Da classificare":
                 continue
             if paz_stato not in stati_filtro:
                 continue

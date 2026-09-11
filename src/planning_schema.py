@@ -35,10 +35,10 @@ def default_patient_optimization(
     urgency: str,
     qualified_resident_ids: Iterable[str],
 ) -> dict[str, Any]:
-    """Return the v1 paper fields for a new waiting-list patient."""
+    """Return v1 fields; unclassified urgency leaves the maximum waiting time unset."""
 
     max_wait = DEFAULT_MAX_WAIT_DAYS.get(urgency)
-    if max_wait is None:
+    if max_wait is None and urgency != "Da classificare":
         raise ValueError(f"unsupported urgency label: {urgency!r}")
     return {
         "versione_schema": SCHEMA_VERSION,

@@ -19,6 +19,7 @@
                 "categoria_paper": {"enum": ["I'", "I''", "I'''"]},
                 "attesa_massima_giorni": {
                     "type": ["integer", "null"],
+                    "description": "Null per dati ancora da classificare. Il planner richiede un intero positivo per la categoria I'.",
                     "minimum": 1
                 },
                 "specializzandi_abilitati": {
@@ -26,19 +27,7 @@
                     "items": {"type": "string", "minLength": 1},
                     "uniqueItems": true
                 }
-            },
-            "allOf": [
-                {
-                    "if": {
-                        "properties": {"categoria_paper": {"const": "I'"}}
-                    },
-                    "then": {
-                        "properties": {
-                            "attesa_massima_giorni": {"type": "integer", "minimum": 1}
-                        }
-                    }
-                }
-            ]
+            }
         }
     },
     "additionalProperties": true

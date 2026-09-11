@@ -448,11 +448,7 @@ class ControllerScadenzario:
 
         oggi = datetime.date.today()
 
-        # Qt segnala un warning se si rimuove uno span inesistente.
-        riga_gv = self.view.row_labels.index("Giro Visite")
-        for col in range(num_giorni):
-            if self.view.tabella.columnSpan(riga_gv, col) > 1:
-                self.view.tabella.setSpan(riga_gv, col, 1, 1)
+        self.view.tabella.clearSpans()
 
         for giorno in range(1, num_giorni + 1):
             data_corrente = datetime.date(self.anno_corrente, self.mese_corrente, giorno)
@@ -468,7 +464,7 @@ class ControllerScadenzario:
             for riga in range(1, len(self.view.row_labels)):
                 nome_riga = self.view.row_labels[riga]
                 if nome_riga == "Giro Visite":
-                    continue  # gestita separatamente con setSpan
+                    continue
                 valore = "-" if is_festivo else self.model.get_valore_cella(data_str, nome_riga)
                 self.view.tabella.setItem(riga, giorno - 1, self.view.crea_item_cella(valore, is_festivo, nome_riga, is_oggi))
 
@@ -477,43 +473,17 @@ class ControllerScadenzario:
         self.view.tabella.blockSignals(False)
 
     def _applica_giro_visite(self, num_giorni: int, oggi: datetime.date):
-        """Applica setSpan per la riga Giro Visite, raggruppando i giorni lun-ven in blocchi settimanali."""
-        RIGA_GV = self.view.row_labels.index("Giro Visite")
-        col = 0
-        while col < num_giorni:
-            data_corrente = datetime.date(self.anno_corrente, self.mese_corrente, col + 1)
-            wd = data_corrente.weekday()
-
-            if wd >= 5:  # sabato/domenica
-                item = self.view.crea_item_cella("-", True, "Giro Visite", False)
-                self.view.tabella.setItem(RIGA_GV, col, item)
-                col += 1
-                continue
-
-            block_start = col
-            while col < num_giorni:
-                d = datetime.date(self.anno_corrente, self.mese_corrente, col + 1)
-                if d.weekday() >= 5:
-                    break
-                col += 1
-            block_end = col  # esclusivo
-            block_len = block_end - block_start
-
-            start_date = datetime.date(self.anno_corrente, self.mese_corrente, block_start + 1)
-            lun_date = start_date - datetime.timedelta(days=start_date.weekday())
-            lun_str = lun_date.strftime("%Y-%m-%d")
-
-            valore = self.model.get_giro_visite_settimana(lun_str, self.anno_corrente, self.mese_corrente)
-
-            is_oggi_block = any(
-                datetime.date(self.anno_corrente, self.mese_corrente, c + 1) == oggi
-                for c in range(block_start, block_end)
+        """Mostra la stessa assegnazione in ogni cella lavorativa della settimana."""
+        row = self.view.row_labels.index("Giro Visite")
+        for column in range(num_giorni):
+            day = datetime.date(self.anno_corrente, self.mese_corrente, column + 1)
+            weekend = day.weekday() >= 5
+            monday = day - datetime.timedelta(days=day.weekday())
+            value = "-" if weekend else self.model.get_giro_visite_settimana(
+                monday.isoformat(), day.year, day.month
             )
-
-            if block_len > 1:
-                self.view.tabella.setSpan(RIGA_GV, block_start, 1, block_len)
-            item = self.view.crea_item_cella(valore, False, "Giro Visite", is_oggi_block)
-            self.view.tabella.setItem(RIGA_GV, block_start, item)
+            item = self.view.crea_item_cella(value, weekend, "Giro Visite", day == oggi)
+            self.view.tabella.setItem(row, column, item)
 
     def salva_modifica_cella(self, riga, colonna):
         if riga == 0 or self.modalita_corrente == "STORICO":
@@ -524,19 +494,67 @@ class ControllerScadenzario:
 
         giorno = colonna + 1
         data_corrente = datetime.date(self.anno_corrente, self.mese_corrente, giorno)
+        if data_corrente.weekday() >= 5:
+            self.aggiorna_tabella()
+            return
         data_str = data_corrente.strftime("%Y-%m-%d")
 
         nome_riga = self.view.row_labels[riga]
         item = self.view.tabella.item(riga, colonna)
-        nuovo_valore = item.text() if item else ""
+        nuovo_valore = item.text().strip() if item else ""
+        if nuovo_valore == "-":
+            nuovo_valore = ""
 
         if nome_riga == "Giro Visite":
             lun_date = data_corrente - datetime.timedelta(days=data_corrente.weekday())
             lun_str = lun_date.strftime("%Y-%m-%d")
-            self.model.set_giro_visite_settimana(lun_str, self.anno_corrente, self.mese_corrente, nuovo_valore)
-            is_oggi = (data_corrente == datetime.date.today())
-            self.view.aggiorna_stile_cella(riga, colonna, nuovo_valore, nome_riga, False, is_oggi)
+            previous = self.model.get_giro_visite_settimana(
+                lun_str, self.anno_corrente, self.mese_corrente
+            )
+            if previous == nuovo_valore:
+                return
+            try:
+                self.model.valida_giro_visite_settimana(lun_str, nuovo_valore)
+            except ValueError as error:
+                QMessageBox.warning(self.view, "Giro visite non modificabile", str(error))
+                self.aggiorna_tabella()
+                return
+            if previous:
+                friday = lun_date + datetime.timedelta(days=4)
+                action = "Sostituire l'assegnazione" if nuovo_valore else "Rimuovere l'assegnazione"
+                answer = QMessageBox.question(
+                    self.view,
+                    "Modifica giro visite",
+                    f"{action} per tutta la settimana "
+                    f"dal {lun_date:%d/%m} al {friday:%d/%m}?",
+                    QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+                    QMessageBox.StandardButton.No,
+                )
+                if answer != QMessageBox.StandardButton.Yes:
+                    self.aggiorna_tabella()
+                    return
+            self.model.set_giro_visite_settimana(
+                lun_str, self.anno_corrente, self.mese_corrente, nuovo_valore
+            )
+            self.aggiorna_tabella()
             return
+
+        if nuovo_valore and nome_riga != "Tipo Guardia":
+            monday = data_corrente - datetime.timedelta(days=data_corrente.weekday())
+            used = [self.model.get_giro_visite_settimana(
+                monday.isoformat(), self.anno_corrente, self.mese_corrente
+            )] + [
+                self.model.get_valore_cella(data_str, role)
+                for role in self.view.row_labels[2:]
+                if role not in (nome_riga, "Giro Visite")
+            ]
+            if nuovo_valore.casefold() in {value.strip().casefold() for value in used}:
+                QMessageBox.warning(
+                    self.view, "Assegnazione non valida",
+                    "Lo specializzando ha già un altro incarico in questa giornata.",
+                )
+                self.aggiorna_tabella()
+                return
 
         self.model.set_valore_cella(data_str, nome_riga, nuovo_valore)
 

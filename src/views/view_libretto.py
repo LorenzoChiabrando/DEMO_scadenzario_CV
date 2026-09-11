@@ -367,8 +367,7 @@ class ViewLibretto(QWidget):
         cd.addWidget(sep)
 
         lbl_meta_help = QLabel(
-            "Orario e sede descrivono la giornata nel libretto e non confermano "
-            "le singole attività."
+            "Orario e sede riepilogano le attività della giornata."
         )
         lbl_meta_help.setObjectName("SottoTitoloDialog")
         lbl_meta_help.setWordWrap(True)
@@ -387,12 +386,14 @@ class ViewLibretto(QWidget):
         self.inp_meta_ora_inizio.setObjectName("InputMetaOra")
         self.inp_meta_ora_inizio.setFixedWidth(72)
         self.inp_meta_ora_inizio.setPlaceholderText("HH:MM")
+        self.inp_meta_ora_inizio.setReadOnly(True)
         lbl_ora_sep = QLabel("–")
         lbl_ora_sep.setObjectName("LblMetaDash")
         self.inp_meta_ora_fine = QLineEdit("18:00")
         self.inp_meta_ora_fine.setObjectName("InputMetaOra")
         self.inp_meta_ora_fine.setFixedWidth(72)
         self.inp_meta_ora_fine.setPlaceholderText("HH:MM")
+        self.inp_meta_ora_fine.setReadOnly(True)
 
         lbl_sede_key = QLabel("SEDE")
         lbl_sede_key.setObjectName("LblMetaGiornoKey")
@@ -400,6 +401,7 @@ class ViewLibretto(QWidget):
         self.combo_meta_sede.setObjectName("ComboMetaSede")
         self.combo_meta_sede.setFixedWidth(150)
         self.combo_meta_sede.addItems(["Molinette", "Altra Sede"])
+        self.combo_meta_sede.setEnabled(False)
 
         mf.addWidget(lbl_ora_key)
         mf.addSpacing(6)
@@ -413,18 +415,6 @@ class ViewLibretto(QWidget):
         mf.addSpacing(6)
         mf.addWidget(self.combo_meta_sede)
         mf.addStretch()
-
-        self.btn_salva_meta = QPushButton("Salva orario e sede")
-        self.btn_salva_meta.setObjectName("BtnSalvaMeta")
-        self.btn_salva_meta.setFixedHeight(34)
-        self.btn_salva_meta.setCursor(Qt.CursorShape.PointingHandCursor)
-        self.btn_salva_meta.setToolTip(
-            "Aggiorna soltanto l'orario complessivo e la sede della giornata."
-        )
-        mf.addWidget(self.btn_salva_meta)
-
-        self._on_save_meta_fn = None
-        self.btn_salva_meta.clicked.connect(self._dispatch_save_meta)
 
         cd.addWidget(meta_frame)
 
@@ -588,17 +578,18 @@ class ViewLibretto(QWidget):
 
     def popola_dettaglio_giorno(self, data_str: str, attivita: list,
                                 extra_dict: dict, on_save,
-                                meta: dict = None, on_save_meta=None):
+                                meta: dict = None):
         self.lbl_giorno_titolo.setText(_fmt_data(data_str))
 
         m = meta or {}
-        self.inp_meta_ora_inizio.setText(m.get("ora_inizio", "08:00"))
-        self.inp_meta_ora_fine.setText(m.get("ora_fine", "18:00"))
-        sede_val = m.get("sede", "Molinette")
+        ora_inizio, ora_fine = _day_ora(attivita).split(" – ")
+        self.inp_meta_ora_inizio.setText(m.get("ora_inizio", ora_inizio))
+        self.inp_meta_ora_fine.setText(m.get("ora_fine", ora_fine))
+        sede_val = m.get("sede", _day_sede(attivita))
+        if self.combo_meta_sede.findText(sede_val) < 0:
+            self.combo_meta_sede.addItem(sede_val)
         idx = self.combo_meta_sede.findText(sede_val)
         self.combo_meta_sede.setCurrentIndex(idx if idx >= 0 else 0)
-
-        self._on_save_meta_fn = on_save_meta
 
         while self.giorno_cards_layout.count():
             child = self.giorno_cards_layout.takeAt(0)
@@ -1088,14 +1079,6 @@ class ViewLibretto(QWidget):
             vl.addLayout(grid)
 
         return card
-
-    def _dispatch_save_meta(self):
-        if self._on_save_meta_fn:
-            self._on_save_meta_fn({
-                "ora_inizio": self.inp_meta_ora_inizio.text().strip(),
-                "ora_fine":   self.inp_meta_ora_fine.text().strip(),
-                "sede":       self.combo_meta_sede.currentText(),
-            })
 
     def _vsep(self):
         sep = QFrame()

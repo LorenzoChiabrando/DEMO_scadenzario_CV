@@ -4,7 +4,7 @@ from pathlib import Path
 
 import pytest
 from PySide6.QtCore import QByteArray, QMimeData
-from PySide6.QtWidgets import QApplication, QDialog, QLabel, QSpinBox, QWidget
+from PySide6.QtWidgets import QApplication, QDialog, QLabel, QPushButton, QSpinBox, QWidget
 
 from src.controllers.controller_sale_operatorie import ControllerSaleOperatorie
 from src.views.components.combo_delegate import SmartComboBoxDelegate
@@ -72,7 +72,8 @@ def test_operation_card_displays_the_physical_room(qt_app: QApplication) -> None
     assert badge is not None
     assert badge.text() == "OR-2"
     assert reference is not None
-    assert reference.text() == "ID: PZ-SYN  ·  ICD-9: 00.00"
+    assert reference.text() == "ICD-9: 00.00"
+    assert all("PZ-SYN" not in label.text() for label in card.findChildren(QLabel))
     view.deleteLater()
 
 
@@ -119,7 +120,7 @@ def test_operation_popup_clarifies_dates_identifier_and_residents(
         op_idx=0,
     )
 
-    assert "ID paziente: PZ-SYN" in captured
+    assert all("PZ-SYN" not in text for text in captured)
     assert "DATA OPERAZIONE" in captured
     assert "05/05/2026" in captured
     assert "SPECIALIZZANDI" in captured
@@ -140,7 +141,7 @@ def test_bulk_duration_change_keeps_intervention_details_consistent(
     assert [item["durata"] for item in patients[1]["interventi"]] == [90, 60]
 
     duration_combo = dialog.tabella.cellWidget(1, _COL_DUR)
-    duration_combo.setCurrentText("120 min")
+    duration_combo.setText("120")
     updated_patient = dialog.get_pazienti()[1]
 
     assert updated_patient["durata_intervento"] == 120
@@ -177,9 +178,7 @@ def test_imported_patient_can_remain_unclassified_while_being_edited(
             "cognome": "Test",
             "codice_diagnosi": "433.10",
             "descrizione_diagnosi": "Diagnosi sintetica",
-            "interventi": [
-                {"codice": "00.00", "descrizione": "Procedura sintetica", "durata": 90}
-            ],
+            "interventi": [{"codice": "00.00", "descrizione": "Procedura sintetica", "durata": 90}],
             "tipo_chirurgia": "Da classificare",
             "complessita": "Da classificare",
             "urgenza": "Media",
@@ -192,15 +191,33 @@ def test_imported_patient_can_remain_unclassified_while_being_edited(
     dialog.deleteLater()
 
 
-def test_libretto_hides_training_score_and_explains_day_metadata(
+def test_libretto_shows_day_metadata_without_a_save_button(
     qt_app: QApplication,
 ) -> None:
     view = ViewLibretto()
 
     labels = {label.text() for label in view.findChildren(QLabel)}
     assert "TRAINING SCORE" not in labels
-    assert view.btn_salva_meta.text() == "Salva orario e sede"
-    assert "orario complessivo" in view.btn_salva_meta.toolTip()
+    assert not any("Salva orario" in button.text() for button in view.findChildren(QPushButton))
+    assert view.inp_meta_ora_inizio.isReadOnly()
+    assert view.inp_meta_ora_fine.isReadOnly()
+    view.popola_dettaglio_giorno(
+        "2026-09-08",
+        [
+            {
+                "data": "2026-09-08",
+                "ora_inizio": "09:00",
+                "ora_fine": "12:00",
+                "attivita": "Giro Visite",
+                "sede": "Reparto",
+                "tipo": "pianificata",
+            }
+        ],
+        {},
+        on_save=lambda _activity: None,
+    )
+    assert view.inp_meta_ora_inizio.text() == "09:00"
+    assert view.inp_meta_ora_fine.text() == "12:00"
     view.deleteLater()
 
 

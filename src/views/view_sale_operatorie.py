@@ -682,8 +682,6 @@ class ViewSaleOperatorie(QWidget):
         codici = [i.get("codice", "") for i in interventi_list if i.get("codice")]
         codici_text = "  ·  ".join(codici) if codici else op.get("codice_intervento", "")
         references = []
-        if op.get("id_paziente"):
-            references.append(f"ID: {op.get('id_paziente')}")
         if codici_text:
             references.append(f"ICD-9: {codici_text}")
         if references:

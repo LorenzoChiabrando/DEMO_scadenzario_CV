@@ -171,7 +171,10 @@ class ControllerLibretto:
                 except ValueError:
                     continue
                 for offset in range(5):
-                    data_str = (lun_date + _td(days=offset)).isoformat()
+                    giorno = lun_date + _td(days=offset)
+                    if (giorno.year, giorno.month) != (anno, mese):
+                        continue
+                    data_str = giorno.isoformat()
                     if ("Reparto", "Giro Visite") in {(k[1], k[2]) for k in confirmed_keys if k[0] == data_str}:
                         continue
                     result.append({
@@ -299,14 +302,10 @@ class ControllerLibretto:
             self._aggiorna_cache(self._spec_corrente)
             self._popola_lista_attivita(self._categoria_corrente)
 
-        def _on_save_meta(meta_data):
-            self.model.salva_meta_giorno(spec_id, data_str, meta_data)
-            self._popola_lista_attivita(self._categoria_corrente)
-
         self.view.popola_dettaglio_giorno(
             data_str, attivita, extra_dict,
             on_save=_on_save,
-            meta=meta, on_save_meta=_on_save_meta,
+            meta=meta,
         )
         self.view.stacked_widget.setCurrentIndex(2)
 

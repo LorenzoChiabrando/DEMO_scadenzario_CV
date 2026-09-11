@@ -3,21 +3,19 @@ import json
 from datetime import datetime
 
 from src.models.id_generator import next_available_id
-from src.planning_schema import OPTIMIZATION_KEY, default_patient_optimization
+from src.patient_fields import normalize_diagnosis
+from src.planning_schema import (
+    DEFAULT_MAX_WAIT_DAYS, OPTIMIZATION_KEY, default_patient_optimization,
+)
 
 
 def _diagnosis_fields(data: dict, existing: dict | None = None) -> tuple[str, str, str]:
     previous = existing or {}
     code = data.get("codice_diagnosi", previous.get("codice_diagnosi", ""))
-    description = data.get(
-        "descrizione_diagnosi",
-        previous.get("descrizione_diagnosi", ""),
-    )
-    legacy = data.get("diagnosi", previous.get("diagnosi", ""))
-    if not description:
-        description = legacy
-    summary = f"[{code}] {description}" if code else description
-    return str(code).strip(), str(description).strip(), str(summary).strip()
+    description = data.get("descrizione_diagnosi", data.get("diagnosi"))
+    if description is None:
+        description = previous.get("descrizione_diagnosi", previous.get("diagnosi", ""))
+    return normalize_diagnosis(str(code), str(description))
 
 
 class DataManagerPazienti:
@@ -132,6 +130,7 @@ class DataManagerPazienti:
         primo = interventi[0] if interventi else {}
         durata_tot = sum(i.get("durata", 0) for i in interventi) or dati.get("durata_intervento", paz.get("durata_intervento", 90))
         codice_diagnosi, descrizione_diagnosi, diagnosi = _diagnosis_fields(dati, paz)
+        previous_urgency = paz.get("urgenza")
 
         paz.update({
             "nome": dati["nome"],
@@ -151,6 +150,15 @@ class DataManagerPazienti:
         })
         if OPTIMIZATION_KEY in dati:
             paz[OPTIMIZATION_KEY] = dati[OPTIMIZATION_KEY]
+        elif previous_urgency != paz["urgenza"]:
+            configuration = paz.get(OPTIMIZATION_KEY)
+            if (
+                isinstance(configuration, dict)
+                and configuration.get("categoria_paper") == "I'"
+                and configuration.get("attesa_massima_giorni")
+                == DEFAULT_MAX_WAIT_DAYS.get(previous_urgency)
+            ):
+                configuration["attesa_massima_giorni"] = DEFAULT_MAX_WAIT_DAYS.get(paz["urgenza"])
         with open(filepath, 'w', encoding='utf-8') as f:
             json.dump(paz, f, indent=4)
         return paz

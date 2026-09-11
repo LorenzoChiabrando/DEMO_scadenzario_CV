@@ -1486,8 +1486,7 @@ class ControllerSaleOperatorie(QObject):
         lbl_titolo.setAlignment(Qt.AlignmentFlag.AlignCenter)
         root.addWidget(lbl_titolo)
 
-        id_paz = slot.get("id_paziente", "")
-        lbl_sub = QLabel(f"ID paziente: {id_paz}" if id_paz else "Scheda paziente")
+        lbl_sub = QLabel("Scheda paziente")
         lbl_sub.setObjectName("SottoTitoloDialog")
         lbl_sub.setAlignment(Qt.AlignmentFlag.AlignCenter)
         root.addWidget(lbl_sub)

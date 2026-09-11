@@ -2,6 +2,7 @@
 .claude/
 
 # Documenti interni
+/docs/
 minute/
 context-documents/
 
@@ -17,3 +18,5 @@ tmp/
 *.lp
 *.mps
 .mmsd-planning.lock
+.demo_backups/
+.demo-stage-*/

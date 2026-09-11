@@ -407,6 +407,8 @@ class ViewScadenzario(QWidget):
             header.setMinimumSectionSize(60)
             header.setSectionResizeMode(QHeaderView.ResizeMode.Fixed)
             header.setDefaultSectionSize(150)
+            for column in range(self.tabella.columnCount()):
+                header.resizeSection(column, 150)
             self.tabella.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
         self.tabella.viewport().update()
         header.viewport().update()

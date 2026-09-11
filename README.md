@@ -106,22 +106,87 @@ Nella vista mensile gli specializzandi sono mostrati tramite iniziali; un click 
 visualizza il nome completo. Le Sale operatorie offrono lo stesso riepilogo mensile in sola
 lettura, mentre gli spostamenti e la pianificazione restano disponibili nella vista settimanale.
 
+Il giro visite ha una cella per ciascun giorno lavorativo. Le cinque celle condividono
+l'assegnazione della settimana: la prima scelta riempie tutte le celle, mentre sostituzione
+e cancellazione richiedono conferma. Il controllo dei conflitti considera tutti i giorni da
+lunedì a venerdì, anche a cavallo di due mesi. Una settimana che comprende un mese convalidato
+mantiene l'assegnazione già confermata. Nei libretti il riepilogo di orario e sede è in sola
+lettura; la conferma delle singole attività resta disponibile. Le sale operatorie mostrano
+i codici degli interventi e conservano l'ID paziente nei dati, senza visualizzarlo nelle schede.
+
 Il comando **Esporta PDF** crea un documento da stampa per l'intero mese o una singola
 settimana. I mesi usano A3 orizzontale, le settimane A4 orizzontale; la generazione usa Qt e
 non richiede dipendenze aggiuntive.
 
 L'inserimento multiplo riconosce sia i template nativi sia i CSV TrackCare, inclusi separatore
-`;`, BOM, codifica UTF-8/Windows-1252 e intestazioni accentate o degradate come `Priorit�`.
-Le classi TrackCare A/B/C/D sono mappate rispettivamente su Alta/Media/Bassa/Bassa. I campi
-`tipo_chirurgia` e `complessita`, assenti dall'esportazione TrackCare, vengono importati come
-`Da classificare`; la durata assente è proposta a 90 minuti e rimane modificabile
-nell'anteprima. La complessità deve essere classificata prima di avviare il planner, che rifiuta
-esplicitamente valori non supportati. Il file originale non viene copiato nel repository.
+`;`, BOM, codifica UTF-8/Windows-1252 e intestazioni accentate o degradate come `Priorit�`
+e `Prioritï¿½`. Il mapping è implementato in [`patient_csv.py`](src/importers/patient_csv.py):
+
+| Campo applicativo | Colonna TrackCare | Trattamento |
+| --- | --- | --- |
+| `nome` | `Nome` | Obbligatorio. |
+| `cognome` | `Cognome` | Obbligatorio. |
+| `codice_diagnosi`, `descrizione_diagnosi` | `Diagnosi ICD9` | Separa il codice finale fra parentesi; un valore composto dal solo codice va nel campo codice. |
+| `codice_intervento` | `codice intervento` | Mantiene codici e posizioni anche per più interventi. |
+| `descrizione_intervento` | `Intervento/procedura ICD9` | Separa le procedure con `;` e ricava gli eventuali codici finali mancanti. |
+| `tipo_chirurgia` | Assente | `Da classificare`; campo descrittivo, non richiesto dal solver. |
+| `complessita` | Assente | `Da classificare`; da completare prima della pianificazione. |
+| `urgenza` | `Priorità`, `urgenza` e varianti di codifica | A → Alta, B → Media, C/D → Bassa; valori assenti o sconosciuti → `Da classificare`, con avviso. |
+| `durata_intervento` | Opzionale: `durata`, `durata_minuti`, `durata_intervento` | Minuti interi positivi; se assente propone 90 minuti e mostra un avviso. |
+
+Il file originale non viene copiato nel repository.
+
+Anche **Aggiungi Paziente** usa i dati disponibili nel CSV: nome, cognome, diagnosi,
+codice/descrizione dell'intervento e priorità. Solo nome e cognome sono obbligatori,
+come nel bulk. La diagnosi può essere descrittiva, contenere il codice fra parentesi
+o essere composta dal solo codice; il campo codice separato resta facoltativo.
+
+**Mostra dati aggiuntivi (facoltativi)** permette di impostare durata, tipo chirurgia,
+complessità, stato e note. Tipo chirurgia, complessità e urgenza non specificati restano
+`Da classificare`, senza attribuire automaticamente una classe clinica. La durata iniziale
+è una stima di 90 minuti totali, ripartita fra le procedure e segnalata nel modulo.
+La scheda nasce `In Attesa`. Quando la si riapre in modifica, i dati aggiuntivi sono visibili
+e mantengono i valori salvati. Per il planner restano necessari i dati richiesti dal modello,
+fra cui complessità e limite di attesa per i pazienti `I'`.
+
+L'anteprima permette di digitare la durata totale. Se il CSV contiene più durate (`60;90`),
+le conserva separatamente; una modifica del totale lo ripartisce fra le procedure, mantenendo
+la somma esatta. Righe con nomi mancanti o durate non valide bloccano l'importazione fino alla
+correzione. Un caricamento fallito svuota la precedente anteprima. I pazienti importati con
+urgenza da classificare restano visibili in lista e hanno `attesa_massima_giorni: null`.
+Modificando l'urgenza nella scheda, il data manager aggiorna l'attesa standard a 30, 60 o 180
+giorni; conserva un eventuale limite personalizzato già presente.
 
 Il paziente conserva separatamente `codice_diagnosi` e `descrizione_diagnosi`, mantenendo anche
 il campo legacy `diagnosi` per compatibilità. **Data inserimento** e **Data intervento** sono
 visualizzate separatamente: lo stato `Pianificato` viene derivato esclusivamente da un
 collegamento esplicito tramite `id_paziente` in una bozza delle sale operatorie.
+
+## Dati demo aggiornati
+
+[`reset_demo_data.py`](scripts/reset_demo_data.py) genera 20 pazienti sintetici, 8 specializzandi,
+tre mesi di calendari (precedente, corrente e successivo) e tre CSV di prova. Include attività
+completate nella settimana precedente, operazioni pianificate vicine alla data di riferimento
+e pazienti in attesa. Gli scadenzari corrente e futuro sono in bozza, così possono essere
+modificati e poi convalidati prima di usare il planner.
+
+Le anagrafiche sintetiche riprendono i nomi della demo precedente, fra cui Pippo VerdeScuro,
+Mandringo Bello, Spirulina Alga e BAZZ JAZZ. Pino Silvestre completa il posto mancante
+nell'anagrafica degli specializzandi. Questi nomi sono inclusi nel generatore, così un nuovo
+reset non li sostituisce con etichette numerate. ID, riferimenti e date sono indipendenti dai nomi.
+
+A programma chiuso, dalla radice del progetto:
+
+```bash
+venv/bin/python3 scripts/reset_demo_data.py --reference-date 2026-09-08
+venv/bin/python3 scripts/reset_demo_data.py --reference-date 2026-09-08 --write
+```
+
+Senza `--reference-date`, lo script usa la data odierna. La prima riga mostra soltanto
+un'anteprima; `--write` sostituisce `mock_data` e sposta i dati precedenti in
+`.demo_backups/<data>-<identificativo>/`, esclusa da Git. Per ripristinarli, chiudere
+l'applicazione, conservare a parte la cartella `mock_data` corrente e rimettere il backup
+al suo posto. Il reset è un comando manuale e non viene eseguito all'avvio dell'applicazione.
 
 ## Ottimizzazione Pyomo + HiGHS
 
@@ -130,8 +195,9 @@ per la selezione dei pazienti e l'assegnazione degli specializzandi descritta ne
 riferimento. Nel codice rimane il nome inglese `Resident`, usato dal paper, ma indica sempre uno
 specializzando. Con *roster* si intende la turnazione giornaliera `Sala Op. I`/`Sala Op. II`.
 Il costruttore scientifico riproduce letteralmente le equazioni stampate; changeover e turnazione
-giornaliera sono estensioni applicative separate. Formulazione e assunzioni sono documentate in
-[`docs/optimization_model.md`](docs/optimization_model.md).
+giornaliera sono estensioni applicative separate. La formulazione è implementata in
+[`model.py`](src/optimization/model.py); i controlli sui dati sono in
+[`validation.py`](src/optimization/validation.py).
 
 `highspy` distribuisce i binding e la libreria HiGHS: non è necessario installare un eseguibile
 separato con Homebrew. Usa Python 3.10 o superiore:
@@ -198,7 +264,7 @@ Lo stesso flusso resta disponibile dalla CLI, utile per sviluppo e diagnostica. 
 dry-run, che non modifica alcun file:
 
 ```bash
-python -m src.optimization.platform_cli --week 2026-05-04 --project-root .
+python -m src.optimization.platform_cli --week 2026-09-14 --project-root .
 ```
 
 La scrittura è esplicita. `--overwrite` è necessario se la settimana in stato `BOZZA` contiene
@@ -206,7 +272,7 @@ già operazioni; una settimana o un mese `CONVALIDATO` viene sempre rifiutato:
 
 ```bash
 python -m src.optimization.platform_cli \
-  --week 2026-05-04 \
+  --week 2026-09-14 \
   --project-root . \
   --write \
   --overwrite
@@ -215,4 +281,4 @@ python -m src.optimization.platform_cli \
 Il comando risolve e valida tutto in memoria prima della persistenza, crea un backup privato e
 sostituisce atomicamente soltanto i cinque giorni interessati. L'output del comando contiene
 solo conteggi e diagnostica aggregata, non dati clinici. Le regole di mapping adottate sono
-descritte in [`docs/optimization_model.md`](docs/optimization_model.md).
+implementate in [`platform_mapping.py`](src/optimization/platform_mapping.py).

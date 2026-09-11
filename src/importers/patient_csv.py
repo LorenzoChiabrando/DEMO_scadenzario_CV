@@ -1,10 +1,13 @@
 from __future__ import annotations
 
 import csv
+import io
 import re
 import unicodedata
 from dataclasses import dataclass
 from pathlib import Path
+
+from src.patient_fields import DEFAULT_INTERVENTION_MINUTES, normalize_diagnosis
 
 
 class PatientCsvError(ValueError):
@@ -55,7 +58,7 @@ _TRACKCARE_MARKERS = {
 def normalize_header(value: str) -> str:
     """Normalizza un'intestazione CSV per il confronto."""
 
-    without_replacement = value.replace("\ufffd", "")
+    without_replacement = value.replace("ï¿½", "").replace("\ufffd", "")
     decomposed = unicodedata.normalize("NFKD", without_replacement)
     ascii_like = "".join(char for char in decomposed if not unicodedata.combining(char))
     return re.sub(r"[^a-z0-9]+", "_", ascii_like.casefold()).strip("_")
@@ -108,10 +111,49 @@ def _map_urgency(value: str) -> str:
     direct = {"alta": "Alta", "media": "Media", "bassa": "Bassa"}
     if normalized in direct:
         return direct[normalized]
-    match = re.search(r"(?:classe_?)?([abcd])(?:_|$)", normalized)
+    match = re.fullmatch(r"(?:classe_?)?([abcd])(?:_.*)?", normalized)
     if not match:
-        return value.strip()
+        return "Da classificare"
     return {"a": "Alta", "b": "Media", "c": "Bassa", "d": "Bassa"}[match.group(1)]
+
+
+def split_procedure_fields(value: str) -> list[str]:
+    """Split procedure lists, retaining empty positions between semicolons."""
+    return [part.strip() for part in value.split(";")] if value.strip() else []
+
+
+def build_csv_interventions(
+    codes: str, descriptions: str, durations: str
+) -> list[dict[str, str | int]]:
+    """Build aligned procedures with positive integer durations in minutes.
+
+    A single duration is the total; a duration list must match the procedure count.
+    Raise PatientCsvError for invalid or inconsistent durations.
+    """
+    code_values = split_procedure_fields(codes)
+    description_values = split_procedure_fields(descriptions)
+    count = max(len(code_values), len(description_values), 1)
+    duration_values = []
+    for value in durations.split(";"):
+        match = re.fullmatch(r"([0-9]+)(?:\s*min)?", value.strip(), flags=re.IGNORECASE)
+        if not match or not 0 < int(match.group(1)) <= 10080:
+            raise PatientCsvError("La durata deve essere un intero positivo in minuti.")
+        duration_values.append(int(match.group(1)))
+    if len(duration_values) == 1:
+        if duration_values[0] < count:
+            raise PatientCsvError("La durata totale è inferiore al numero di interventi.")
+        per_procedure, remainder = divmod(duration_values[0], count)
+        duration_values = [per_procedure + (index < remainder) for index in range(count)]
+    elif len(duration_values) != count:
+        raise PatientCsvError("Il numero di durate deve corrispondere agli interventi.")
+    return [
+        {
+            "codice": code_values[index] if index < len(code_values) else "",
+            "descrizione": description_values[index] if index < len(description_values) else "",
+            "durata": duration_values[index],
+        }
+        for index in range(count)
+    ]
 
 
 def read_patient_csv(path: str | Path) -> PatientCsvResult:
@@ -124,17 +166,38 @@ def read_patient_csv(path: str | Path) -> PatientCsvResult:
         raise PatientCsvError(f"Impossibile leggere il file: {error}") from error
 
     delimiter = _detect_delimiter(text[:8192])
-    reader = csv.DictReader(text.splitlines(), delimiter=delimiter)
-    if not reader.fieldnames:
+    reader = csv.DictReader(io.StringIO(text, newline=""), delimiter=delimiter, strict=True)
+    try:
+        fieldnames = reader.fieldnames
+    except csv.Error as error:
+        raise PatientCsvError("La riga delle intestazioni CSV non è valida.") from error
+    if not fieldnames:
         raise PatientCsvError("Il file CSV non contiene una riga di intestazione.")
 
-    normalized_headers = [normalize_header(header or "") for header in reader.fieldnames]
+    normalized_headers = [normalize_header(header or "") for header in fieldnames]
     if not any(normalized_headers):
         raise PatientCsvError("Le intestazioni del CSV non sono riconoscibili.")
+    missing = [field for field in ("nome", "cognome") if field not in normalized_headers]
+    if missing:
+        raise PatientCsvError("Il CSV non contiene le colonne richieste: " + ", ".join(missing))
+    nonempty_headers = [header for header in normalized_headers if header]
+    if len(set(nonempty_headers)) != len(nonempty_headers):
+        raise PatientCsvError("Il CSV contiene intestazioni duplicate.")
 
     source_format = "TrackCare" if set(normalized_headers) & _TRACKCARE_MARKERS else "Scadenziario"
     normalized_rows: list[dict[str, str]] = []
-    for source_row in reader:
+    try:
+        source_rows = list(reader)
+    except csv.Error as error:
+        raise PatientCsvError(f"CSV non valido vicino alla riga {reader.line_num}.") from error
+    unclassified_urgency_count = 0
+    missing_duration_count = 0
+    for row_number, source_row in enumerate(source_rows, 2):
+        if None in source_row:
+            raise PatientCsvError(
+                f"La riga {row_number} contiene più campi delle intestazioni. "
+                "Racchiudi tra virgolette i valori che contengono il separatore."
+            )
         row = {
             normalize_header(header or ""): (value or "").strip()
             for header, value in source_row.items()
@@ -145,15 +208,28 @@ def read_patient_csv(path: str | Path) -> PatientCsvResult:
 
         diagnosis_description = _first_value(row, _ALIASES["descrizione_diagnosi"])
         diagnosis_code = _first_value(row, _ALIASES["codice_diagnosi"])
-        diagnosis_code = diagnosis_code or _code_from_description(diagnosis_description)
-        diagnosis_description = _remove_terminal_code(diagnosis_description, diagnosis_code)
+        diagnosis_code, diagnosis_description, _ = normalize_diagnosis(
+            diagnosis_code, diagnosis_description
+        )
 
         intervention_description = _first_value(row, _ALIASES["descrizione_intervento"])
         intervention_code = _first_value(row, _ALIASES["codice_intervento"])
-        intervention_code = intervention_code or _code_from_description(intervention_description)
-        intervention_description = _remove_terminal_code(
-            intervention_description, intervention_code
-        )
+        descriptions = split_procedure_fields(intervention_description)
+        codes = split_procedure_fields(intervention_code)
+        count = max(len(descriptions), len(codes))
+        descriptions += [""] * (count - len(descriptions))
+        codes += [""] * (count - len(codes))
+        for index, description in enumerate(descriptions):
+            codes[index] = codes[index] or _code_from_description(description)
+            descriptions[index] = _remove_terminal_code(description, codes[index])
+        intervention_code = ";".join(codes)
+        intervention_description = ";".join(descriptions)
+        urgency = _map_urgency(_first_value(row, _ALIASES["urgenza"]))
+        if urgency == "Da classificare":
+            unclassified_urgency_count += 1
+        duration = _first_value(row, _ALIASES["durata_intervento"])
+        if not duration:
+            missing_duration_count += 1
 
         normalized_rows.append(
             {
@@ -166,18 +242,23 @@ def read_patient_csv(path: str | Path) -> PatientCsvResult:
                 "tipo_chirurgia": _first_value(row, _ALIASES["tipo_chirurgia"])
                 or "Da classificare",
                 "complessita": _first_value(row, _ALIASES["complessita"]) or "Da classificare",
-                "urgenza": _map_urgency(_first_value(row, _ALIASES["urgenza"])),
-                "durata_intervento": _first_value(row, _ALIASES["durata_intervento"]) or "90",
+                "urgenza": urgency,
+                "durata_intervento": duration or str(DEFAULT_INTERVENTION_MINUTES),
             }
         )
 
     warnings: list[str] = []
+    if unclassified_urgency_count:
+        warnings.append(
+            f"Urgenza assente o non riconosciuta in {unclassified_urgency_count} righe: "
+            "impostata su 'Da classificare'."
+        )
     header_set = set(normalized_headers)
     if not header_set.intersection(_ALIASES["tipo_chirurgia"]):
         warnings.append("Tipo chirurgia assente: impostato su 'Da classificare'.")
     if not header_set.intersection(_ALIASES["complessita"]):
         warnings.append("Complessità assente: impostata su 'Da classificare'.")
-    if not header_set.intersection(_ALIASES["durata_intervento"]):
+    if missing_duration_count:
         warnings.append("Durata assente: impostata a 90 minuti e modificabile in anteprima.")
 
     return PatientCsvResult(

@@ -1,6 +1,6 @@
 import json
 import os
-from datetime import datetime
+from datetime import date, timedelta
 
 from src.planning_schema import OPTIMIZATION_KEY, default_schedule_optimization
 
@@ -98,14 +98,56 @@ class DataManager:
         
     def get_giro_visite_settimana(self, lun_str: str, anno: int, mese: int) -> str:
         data = self.load_mese(anno, mese)
-        return data.get("giro_visite", {}).get(lun_str, "")
+        if lun_str in data.get("giro_visite", {}):
+            return data["giro_visite"][lun_str]
+        for year, month in self._mesi_giro_visite(lun_str):
+            assignment = self.load_mese(year, month).get("giro_visite", {}).get(lun_str)
+            if assignment is not None:
+                return assignment
+        return ""
+
+    @staticmethod
+    def _mesi_giro_visite(lun_str: str) -> tuple[tuple[int, int], ...]:
+        monday = date.fromisoformat(lun_str)
+        if monday.weekday() != 0:
+            raise ValueError("Il giro visite deve iniziare di lunedì.")
+        days = [monday + timedelta(days=offset) for offset in range(5)]
+        return tuple(sorted({(day.year, day.month) for day in days}))
+
+    def valida_giro_visite_settimana(self, lun_str: str, valore: str) -> None:
+        """Controlla mesi convalidati e altri incarichi su tutti i cinque giorni."""
+        monday = date.fromisoformat(lun_str)
+        months = {
+            key: self.load_mese(*key) for key in self._mesi_giro_visite(lun_str)
+        }
+        for data in months.values():
+            previous = data.get("giro_visite", {}).get(lun_str, "")
+            if data.get("metadata", {}).get("stato") == "CONVALIDATO" and previous != valore:
+                raise ValueError("La settimana comprende giorni di un mese già convalidato.")
+        if not valore:
+            return
+        for offset in range(5):
+            day = monday + timedelta(days=offset)
+            daily = months[day.year, day.month].get("turni", {}).get(day.isoformat(), {})
+            if any(
+                isinstance(assigned, str)
+                and assigned.strip().casefold() == valore.strip().casefold()
+                for role, assigned in daily.items()
+                if role not in ("Tipo Guardia", "Giro Visite")
+            ):
+                raise ValueError(
+                    f"Lo specializzando ha già un altro incarico il {day:%d/%m/%Y}. "
+                    "Scegli un nome disponibile per tutta la settimana."
+                )
 
     def set_giro_visite_settimana(self, lun_str: str, anno: int, mese: int, valore: str):
-        data = self.load_mese(anno, mese)
-        if "giro_visite" not in data:
-            data["giro_visite"] = {}
-        data["giro_visite"][lun_str] = valore
-        self.save_mese(anno, mese, data)
+        self.valida_giro_visite_settimana(lun_str, valore)
+        for year, month in self._mesi_giro_visite(lun_str):
+            data = self.load_mese(year, month)
+            if data.get("metadata", {}).get("stato") == "CONVALIDATO":
+                continue
+            data.setdefault("giro_visite", {})[lun_str] = valore
+            self.save_mese(year, month, data)
 
     def get_mesi_disponibili(self):
         disponibili = []
