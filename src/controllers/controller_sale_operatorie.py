@@ -22,6 +22,7 @@ from src.calendar_presentation import (
 from src.exports.calendar_pdf import CalendarPdfDocument, CalendarPdfRow, write_calendar_pdf
 from src.optimization.platform_service import plan_platform_week
 from src.patient_fields import parse_patient_insertion_date
+from src.data_paths import PROJECT_ROOT, resolve_data_directory
 from src.planning_schema import OPTIMIZATION_KEY
 from src.workers.platform_planning_worker import (
     PlanningService,
@@ -171,6 +172,7 @@ class ControllerSaleOperatorie(QObject):
         model_libretto=None,
         *,
         project_root: str | Path | None = None,
+        data_directory: str | Path | None = None,
         planning_service: PlanningService = plan_platform_week,
     ):
         super().__init__(view)
@@ -185,6 +187,9 @@ class ControllerSaleOperatorie(QObject):
             else Path(__file__).resolve().parents[2]
         )
         self._planning_service = planning_service
+        self._data_directory = resolve_data_directory(
+            data_directory, project_root=self._project_root,
+        )
         self._planning_worker: PlatformPlanningWorker | None = None
         self._planning_cancel_event: Event | None = None
         self._planning_result = None
@@ -436,7 +441,7 @@ class ControllerSaleOperatorie(QObject):
         )
 
     def _load_style(self):
-        path = _os.path.join("asset", "styles", "pazienti.qss")
+        path = _os.path.join(PROJECT_ROOT, "asset", "styles", "pazienti.qss")
         return open(path, encoding="utf-8").read() if _os.path.exists(path) else ""
 
     def _avviso(self, titolo: str, messaggio: str, tipo: str = "info", parent=None):
@@ -703,6 +708,7 @@ class ControllerSaleOperatorie(QObject):
             self._project_root,
             monday,
             overwrite=overwrite,
+            data_directory=self._data_directory,
             cancel_event=cancel_event,
             planning_service=self._planning_service,
             parent=self,

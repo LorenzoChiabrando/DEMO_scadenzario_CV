@@ -12,6 +12,7 @@ from pathlib import Path
 from typing import Any
 from uuid import uuid4
 
+from src.data_paths import resolve_data_directory
 from src.models.patient_plan_state import (
     draft_patient_ids_by_week,
     patient_status_updates,
@@ -48,16 +49,18 @@ def load_platform_context(
     project_root: str | Path,
     monday: date,
     policy: PlatformPlanningPolicy | None = None,
+    *,
+    data_directory: str | Path | None = None,
 ) -> PlatformPlanningContext:
     """Load and map the requested platform week."""
-    root = Path(project_root).resolve()
+    root = resolve_data_directory(data_directory, project_root=project_root)
     active_policy = policy or PlatformPlanningPolicy()
     if monday.weekday() != 0:
         raise PlatformDataError("the planning horizon must start on a Monday")
     expected_days = tuple(monday + timedelta(days=offset) for offset in range(5))
     scadenzario_by_month = _load_convalidated_scadenzario_months(root, expected_days)
-    patient_records = _read_catalog(root / "mock_data" / "pazienti")
-    resident_records = _read_catalog(root / "mock_data" / "libretti")
+    patient_records = _read_catalog(root / "pazienti")
+    resident_records = _read_catalog(root / "libretti")
     resident_by_display_name = _build_resident_name_index(resident_records)
 
     roster_by_day: dict[date, tuple[RosterAssignment, ...]] = {}
@@ -95,12 +98,12 @@ def load_platform_context(
         roster_by_day[day] = tuple(assignments)
 
     other_draft_patient_ids = _collect_other_draft_patient_ids(
-        root / "mock_data" / "sale_operatorie",
+        root / "sale_operatorie",
         excluded_monday=monday,
     )
     sale_months = {
         path.stem: _read_json(path)
-        for path in sorted((root / "mock_data" / "sale_operatorie").glob("????-??.json"))
+        for path in sorted((root / "sale_operatorie").glob("????-??.json"))
     }
     current_draft_patient_ids = draft_patient_ids_by_week(sale_months).get(monday, set())
     return build_platform_context(
@@ -120,10 +123,11 @@ def persist_platform_week_plan(
     *,
     overwrite: bool,
     backup_directory: str | Path | None = None,
+    data_directory: str | Path | None = None,
 ) -> PlatformWriteReceipt:
     """Replace one draft week atomically, preserving unrelated data."""
-    root = Path(project_root).resolve()
-    sale_directory = root / "mock_data" / "sale_operatorie"
+    root = resolve_data_directory(data_directory, project_root=project_root)
+    sale_directory = root / "sale_operatorie"
     sale_directory.mkdir(parents=True, exist_ok=True)
     backup_root = (
         Path(backup_directory).resolve()
@@ -202,7 +206,7 @@ def persist_platform_week_plan(
         }
         try:
             patient_updates = patient_status_updates(
-                root / "mock_data" / "pazienti", sale_directory, updates,
+                root / "pazienti", sale_directory, updates,
             )
         except (OSError, TypeError, ValueError) as exc:
             raise PlatformPersistenceError("cannot prepare patient planning states") from exc
@@ -315,7 +319,7 @@ def _load_convalidated_scadenzario_months(
     snapshots: dict[tuple[int, int], JsonObject] = {}
     unconvalidated: list[str] = []
     for year, month in month_keys:
-        path = root / "mock_data" / "scadenzario" / f"{year:04d}-{month:02d}.json"
+        path = root / "scadenzario" / f"{year:04d}-{month:02d}.json"
         data = _read_json(path)
         snapshots[year, month] = data
         metadata = data.get("metadata")

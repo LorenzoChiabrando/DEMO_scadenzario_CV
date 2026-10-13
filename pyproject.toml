@@ -5,6 +5,8 @@ testpaths = ["tests"]
 
 [tool.ruff]
 include = [
+    "src/data_paths.py",
+    "tests/test_data_paths.py",
     "src/models/id_generator.py",
     "src/models/patient_plan_state.py",
     "src/calendar_presentation.py",
@@ -16,6 +18,7 @@ include = [
     "src/workers/**/*.py",
     "scripts/migrate_platform_json_v1.py",
     "scripts/reset_demo_data.py",
+    "scripts/verify_synthetic_planning.py",
     "tests/test_demo_data.py",
     "tests/conftest.py",
     "tests/controllers/**/*.py",

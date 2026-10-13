@@ -1,14 +1,21 @@
 import json
 import os
 from datetime import date, timedelta
+from pathlib import Path
 
+from src.data_paths import resolve_data_directory
 from src.planning_schema import OPTIMIZATION_KEY, default_schedule_optimization
 
 class DataManager:
-    def __init__(self, dir_scadenzario="mock_data/scadenzario",
-                 dir_libretti="mock_data/libretti"):
-        self.dir_scadenzario = dir_scadenzario
-        self.dir_libretti = dir_libretti
+    def __init__(self, dir_scadenzario=None, dir_libretti=None):
+        self.dir_scadenzario = str(
+            dir_scadenzario if dir_scadenzario is not None
+            else resolve_data_directory() / "scadenzario"
+        )
+        self.dir_libretti = str(
+            dir_libretti if dir_libretti is not None
+            else Path(self.dir_scadenzario).resolve().parent / "libretti"
+        )
         self.specializzandi = self.load_anagrafica()
         
         self._cached_anno = None

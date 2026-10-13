@@ -2,6 +2,7 @@ import os
 import json
 from datetime import datetime
 
+from src.data_paths import resolve_data_directory
 from src.models.id_generator import next_available_id
 from src.patient_fields import normalize_diagnosis
 from src.planning_schema import (
@@ -21,12 +22,14 @@ def _diagnosis_fields(data: dict, existing: dict | None = None) -> tuple[str, st
 class DataManagerPazienti:
     def __init__(
         self,
-        dir_pazienti="mock_data/pazienti",
+        dir_pazienti=None,
         dir_libretti=None,
     ):
-        self.dir_pazienti = dir_pazienti
+        self.dir_pazienti = str(
+            dir_pazienti if dir_pazienti is not None else resolve_data_directory() / "pazienti"
+        )
         self.dir_libretti = dir_libretti or os.path.join(
-            os.path.dirname(os.path.abspath(dir_pazienti)),
+            os.path.dirname(os.path.abspath(self.dir_pazienti)),
             "libretti",
         )
         

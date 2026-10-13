@@ -1,4 +1,5 @@
 import os
+from src.data_paths import PROJECT_ROOT
 from PySide6.QtWidgets import (
     QDialog, QVBoxLayout, QHBoxLayout, QLabel,
     QLineEdit, QComboBox, QPushButton, QMessageBox, QFrame
@@ -140,7 +141,7 @@ class DialogNuovoSpecializzando(QDialog):
         }
 
     def load_styles(self):
-        style_path = os.path.join("asset", "styles", "libretto.qss")
+        style_path = os.path.join(PROJECT_ROOT, "asset", "styles", "libretto.qss")
         if os.path.exists(style_path):
             with open(style_path, "r", encoding="utf-8") as f:
                 self.setStyleSheet(f.read())

@@ -1,4 +1,5 @@
 import os
+from src.data_paths import PROJECT_ROOT
 from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QPushButton,
     QTableWidget, QTableWidgetItem, QHeaderView, QScroller,
@@ -280,6 +281,7 @@ class ViewScadenzario(QWidget):
         self.stacked_widget.addWidget(self.page_calendario)
 
     def _crea_card(self, titolo, descrizione, icon_path, object_name):
+        icon_path = str(PROJECT_ROOT / icon_path)
         btn = QPushButton()
         btn.setObjectName(object_name)
         btn.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
@@ -463,7 +465,7 @@ class ViewScadenzario(QWidget):
             )
 
     def load_styles(self):
-        style_path = os.path.join("asset", "styles", "scadenzario.qss")
+        style_path = os.path.join(PROJECT_ROOT, "asset", "styles", "scadenzario.qss")
         if os.path.exists(style_path):
             with open(style_path, "r", encoding="utf-8") as f:
                 self.setStyleSheet(self.styleSheet() + "\n" + f.read())

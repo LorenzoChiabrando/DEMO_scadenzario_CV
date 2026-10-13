@@ -2,11 +2,14 @@ import os
 import json
 from datetime import date as _date
 
+from src.data_paths import resolve_data_directory
 from src.models.id_generator import next_available_id
 
 class DataManagerLibretto:
-    def __init__(self, dir_libretti="mock_data/libretti"):
-        self.dir_libretti = dir_libretti
+    def __init__(self, dir_libretti=None):
+        self.dir_libretti = str(
+            dir_libretti if dir_libretti is not None else resolve_data_directory() / "libretti"
+        )
         
         if not os.path.exists(self.dir_libretti):
             os.makedirs(self.dir_libretti, exist_ok=True)

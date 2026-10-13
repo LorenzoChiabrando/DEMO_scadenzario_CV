@@ -1,4 +1,5 @@
 import os
+from src.data_paths import PROJECT_ROOT
 from copy import deepcopy
 from PySide6.QtWidgets import (
     QDialog, QVBoxLayout, QHBoxLayout, QLabel, QFrame,
@@ -438,7 +439,7 @@ class DialogBulkPazienti(QDialog):
         return pazienti
 
     def load_styles(self):
-        style_path = os.path.join("asset", "styles", "pazienti.qss")
+        style_path = os.path.join(PROJECT_ROOT, "asset", "styles", "pazienti.qss")
         if os.path.exists(style_path):
             with open(style_path, "r", encoding="utf-8") as f:
                 self.setStyleSheet(f.read())

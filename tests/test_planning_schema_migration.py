@@ -3,6 +3,8 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+import pytest
+
 from scripts.migrate_platform_json_v1 import migrate
 from src.planning_schema import (
     DEFAULT_COMPLEXITIES_BY_TRAINING_LEVEL,
@@ -63,6 +65,22 @@ def test_intermediate_level_has_an_explicit_planning_policy() -> None:
         "Media",
         "Alta",
     )
+
+
+@pytest.mark.parametrize("use_environment", [False, True])
+def test_migration_uses_the_shared_data_directory(tmp_path, monkeypatch, use_environment):
+    root = tmp_path / "project"
+    external = tmp_path / "external"
+    path = external / "pazienti" / "P1.json"
+    original_path = root / "mock_data" / "pazienti" / "P1.json"
+    _write_json(path, {"id": "P1", "urgenza": "Alta"})
+    _write_json(original_path, {"id": "P1", "urgenza": "Alta"})
+    original = original_path.read_bytes()
+    monkeypatch.setenv("MMSD_DATA_DIR", str(external if use_environment else tmp_path / "other"))
+    changes = migrate(root, write=True, data_directory=None if use_environment else external)
+    assert changes["pazienti"] == 1
+    assert OPTIMIZATION_KEY in json.loads(path.read_text())
+    assert original_path.read_bytes() == original
 
 
 def test_new_patient_configuration_has_no_patient_resident_parameter() -> None:

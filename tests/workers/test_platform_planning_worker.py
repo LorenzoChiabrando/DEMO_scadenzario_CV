@@ -61,6 +61,7 @@ def test_worker_forwards_persistence_overwrite_and_live_cancel_callback(
     qt_app.processEvents()
 
     assert received["project_root"] == tmp_path.resolve()
+    assert received["data_directory"] == tmp_path.resolve() / "mock_data"
     assert received["monday"] == monday
     assert received["overwrite"] is True
     assert received["persist"] is True

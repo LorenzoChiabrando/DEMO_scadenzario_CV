@@ -1,7 +1,12 @@
+from __future__ import annotations
+
+import argparse
 import sys
+from pathlib import Path
 from PySide6.QtWidgets import QApplication, QMainWindow, QWidget, QHBoxLayout, QStackedWidget
 from PySide6.QtCore import QLoggingCategory
 
+from src.data_paths import resolve_data_directory
 from src.controllers.controller_sale_operatorie import ControllerSaleOperatorie
 from src.models.data_manager_sale_operatorie import DataManagerSaleOperatorie
 from src.views.view_sidebar import Sidebar
@@ -17,8 +22,9 @@ from src.models.data_manager_pazienti import DataManagerPazienti
 from src.controllers.controller_pazienti import ControllerPazienti
 
 class MainWindow(QMainWindow):
-    def __init__(self):
+    def __init__(self, data_directory: str | Path | None = None):
         super().__init__()
+        self.data_directory = resolve_data_directory(data_directory)
 
         self.view_scad = None
         self.controller_scad = None
@@ -72,10 +78,12 @@ class MainWindow(QMainWindow):
             self.controller_libretto.aggiorna_lista()
 
     def init_pages(self):
-        self.data_manager = DataManager()
-        self.data_manager_libretto = DataManagerLibretto()
-        self.data_manager_pazienti = DataManagerPazienti()
-        self.data_manager_sale_operatorie = DataManagerSaleOperatorie()
+        self.data_manager = DataManager(self.data_directory / "scadenzario")
+        self.data_manager_libretto = DataManagerLibretto(self.data_directory / "libretti")
+        self.data_manager_pazienti = DataManagerPazienti(self.data_directory / "pazienti")
+        self.data_manager_sale_operatorie = DataManagerSaleOperatorie(
+            self.data_directory / "sale_operatorie"
+        )
 
         self.view_scad = ViewScadenzario()
         self.controller_scad = ControllerScadenzario(
@@ -106,6 +114,7 @@ class MainWindow(QMainWindow):
             model_scadenzario=self.data_manager,
             model_pazienti=self.data_manager_pazienti,
             model_libretto=self.data_manager_libretto,
+            data_directory=self.data_directory,
         )
         self.controller_sale_operatorie.planning_busy_changed.connect(
             self.sidebar.setDisabled
@@ -125,11 +134,14 @@ class MainWindow(QMainWindow):
         super().closeEvent(event)
 
 if __name__ == "__main__":
-    app = QApplication(sys.argv)
+    parser = argparse.ArgumentParser(description="MMSD CV")
+    parser.add_argument("--data-dir", type=Path, help="Cartella dati condivisa da GUI e planner")
+    args, qt_args = parser.parse_known_args()
+    app = QApplication([sys.argv[0], *qt_args])
     QLoggingCategory.setFilterRules("qt.qpa.wayland.textinput=false")
     app.setStyle("Fusion")
 
-    window = MainWindow()
+    window = MainWindow(data_directory=args.data_dir)
     window.show()
 
     sys.exit(app.exec())

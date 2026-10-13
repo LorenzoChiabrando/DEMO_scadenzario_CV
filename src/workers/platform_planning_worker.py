@@ -10,6 +10,7 @@ from threading import Event
 
 from PySide6.QtCore import QObject, QThread, Signal
 
+from src.data_paths import resolve_data_directory
 from src.optimization.exceptions import OptimizationError, PlanningCancelledError
 from src.optimization.platform_service import PlatformPlanningRun, plan_platform_week
 
@@ -32,11 +33,15 @@ class PlatformPlanningWorker(QThread):
         *,
         overwrite: bool,
         cancel_event: Event,
+        data_directory: str | Path | None = None,
         planning_service: PlanningService = plan_platform_week,
         parent: QObject | None = None,
     ) -> None:
         super().__init__(parent)
         self._project_root = Path(project_root).resolve()
+        self._data_directory = resolve_data_directory(
+            data_directory, project_root=self._project_root,
+        )
         self._monday = monday
         self._overwrite = overwrite
         self._cancel_event = cancel_event
@@ -51,6 +56,7 @@ class PlatformPlanningWorker(QThread):
                 self._monday,
                 overwrite=self._overwrite,
                 persist=True,
+                data_directory=self._data_directory,
                 cancel_requested=self._cancel_event.is_set,
             )
         except PlanningCancelledError:

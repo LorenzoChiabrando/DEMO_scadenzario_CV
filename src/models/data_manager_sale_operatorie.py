@@ -4,19 +4,27 @@ import datetime as dt
 from datetime import datetime
 from pathlib import Path
 
+from src.data_paths import resolve_data_directory
 from src.models.patient_plan_state import patient_status_updates, write_json_batch
 
 
 class DataManagerSaleOperatorie:
-    def __init__(self, dir_sale_operatorie="mock_data/sale_operatorie",
-                 filepath_anagrafica="mock_data/static_data/anagrafica_specializzandi.json",
+    def __init__(self, dir_sale_operatorie=None,
+                 filepath_anagrafica=None,
                  dir_pazienti=None):
-        self.dir_sale_operatorie = dir_sale_operatorie
+        self.dir_sale_operatorie = str(
+            dir_sale_operatorie if dir_sale_operatorie is not None
+            else resolve_data_directory() / "sale_operatorie"
+        )
+        data_directory = Path(self.dir_sale_operatorie).resolve().parent
         self.dir_pazienti = (
             Path(dir_pazienti) if dir_pazienti is not None
-            else Path(dir_sale_operatorie).parent / "pazienti"
+            else data_directory / "pazienti"
         )
-        self.filepath_anagrafica = filepath_anagrafica
+        self.filepath_anagrafica = str(
+            filepath_anagrafica if filepath_anagrafica is not None
+            else data_directory / "static_data" / "anagrafica_specializzandi.json"
+        )
         self.specializzandi = self.load_anagrafica()
 
         self._cached_anno = None

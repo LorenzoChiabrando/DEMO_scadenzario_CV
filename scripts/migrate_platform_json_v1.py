@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Migrate legacy demo JSON files to optimization schema v1.
+"""Migrate legacy JSON files to optimization schema v1.
 
 The default mode is a dry run; ``--write`` replaces only the files that need changes.
 """
@@ -18,6 +18,7 @@ PROJECT_ROOT = Path(__file__).resolve().parents[1]
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
+from src.data_paths import resolve_data_directory  # noqa: E402
 from src.planning_schema import (  # noqa: E402 - executable script path bootstrap
     OPTIMIZATION_KEY,
     SCHEMA_VERSION,
@@ -30,7 +31,8 @@ JsonObject = dict[str, Any]
 
 def _parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--project-root", type=Path, default=Path.cwd())
+    parser.add_argument("--project-root", type=Path, default=PROJECT_ROOT)
+    parser.add_argument("--data-dir", type=Path)
     parser.add_argument(
         "--write",
         action="store_true",
@@ -98,14 +100,16 @@ def _remove_deprecated_resident_qualification(record: JsonObject, path: Path) ->
     return removed
 
 
-def migrate(project_root: Path, *, write: bool) -> dict[str, int]:
+def migrate(
+    project_root: Path, *, write: bool, data_directory: str | Path | None = None,
+) -> dict[str, int]:
     """Migrate catalogs idempotently and return aggregate change counts."""
 
-    root = project_root.resolve()
+    root = resolve_data_directory(data_directory, project_root=project_root)
     # Only these three catalogues contain inputs used by the optimization mapper.
-    resident_paths = sorted((root / "mock_data" / "libretti").glob("*.json"))
-    patient_paths = sorted((root / "mock_data" / "pazienti").glob("*.json"))
-    schedule_paths = sorted((root / "mock_data" / "scadenzario").glob("*.json"))
+    resident_paths = sorted((root / "libretti").glob("*.json"))
+    patient_paths = sorted((root / "pazienti").glob("*.json"))
+    schedule_paths = sorted((root / "scadenzario").glob("*.json"))
 
     residents = [(path, _read_json(path)) for path in resident_paths]
     changed = {"libretti": 0, "pazienti": 0, "scadenzari": 0}
@@ -150,7 +154,7 @@ def migrate(project_root: Path, *, write: bool) -> dict[str, int]:
 
 def main() -> int:
     args = _parser().parse_args()
-    changed = migrate(args.project_root, write=args.write)
+    changed = migrate(args.project_root, write=args.write, data_directory=args.data_dir)
     mode = "written" if args.write else "dry-run"
     print(
         f"Migration {mode}: {changed['pazienti']} patient files, "

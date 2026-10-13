@@ -7,6 +7,8 @@ from dataclasses import asdict
 from datetime import date
 from pathlib import Path
 
+from src.data_paths import PROJECT_ROOT
+
 from .exceptions import OptimizationError
 from .platform_service import plan_platform_week
 
@@ -16,7 +18,8 @@ def _parser() -> argparse.ArgumentParser:
         description="Solve a platform week with Pyomo/HiGHS and optionally persist it.",
     )
     parser.add_argument("--week", required=True, help="Monday in ISO format (YYYY-MM-DD)")
-    parser.add_argument("--project-root", type=Path, default=Path.cwd())
+    parser.add_argument("--project-root", type=Path, default=PROJECT_ROOT)
+    parser.add_argument("--data-dir", type=Path, help="Data directory shared with the GUI")
     parser.add_argument("--write", action="store_true", help="Commit the validated plan")
     parser.add_argument(
         "--overwrite",
@@ -38,6 +41,7 @@ def main(argv: list[str] | None = None) -> int:
             overwrite=args.overwrite,
             persist=args.write,
             backup_directory=args.backup_directory,
+            data_directory=args.data_dir,
         )
     except (OptimizationError, ValueError) as exc:
         print(f"Planning failed: {exc}", file=sys.stderr)

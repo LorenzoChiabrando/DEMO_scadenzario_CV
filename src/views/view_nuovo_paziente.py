@@ -1,4 +1,5 @@
 import os
+from src.data_paths import PROJECT_ROOT
 from PySide6.QtWidgets import (
     QDialog, QWidget, QVBoxLayout, QHBoxLayout, QLabel, QFrame,
     QLineEdit, QComboBox, QPushButton, QMessageBox, QTextEdit, QScrollArea,
@@ -463,7 +464,7 @@ class DialogNuovoPaziente(QDialog):
         }
 
     def load_styles(self):
-        style_path = os.path.join("asset", "styles", "pazienti.qss")
+        style_path = os.path.join(PROJECT_ROOT, "asset", "styles", "pazienti.qss")
         if os.path.exists(style_path):
             with open(style_path, "r", encoding="utf-8") as f:
                 base = f.read()

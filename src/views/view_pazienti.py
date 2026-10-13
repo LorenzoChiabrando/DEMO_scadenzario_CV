@@ -1,4 +1,5 @@
 import os
+from src.data_paths import PROJECT_ROOT
 from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QFrame,
     QLineEdit, QPushButton, QGraphicsDropShadowEffect,
@@ -465,7 +466,7 @@ class ViewPazienti(QWidget):
         self.lbl_count_total.setText(f"{n_totale} pazienti totali")
 
     def load_styles(self):
-        style_path = os.path.join("asset", "styles", "pazienti.qss")
+        style_path = os.path.join(PROJECT_ROOT, "asset", "styles", "pazienti.qss")
         if os.path.exists(style_path):
             with open(style_path, "r", encoding="utf-8") as f:
                 self.setStyleSheet(self.styleSheet() + "\n" + f.read())

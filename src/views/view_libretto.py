@@ -1,4 +1,5 @@
 import os
+from src.data_paths import PROJECT_ROOT
 from datetime import date as _date
 
 from PySide6.QtWidgets import (
@@ -1179,7 +1180,7 @@ class ViewLibretto(QWidget):
         )
 
     def load_styles(self):
-        style_path = os.path.join("asset", "styles", "libretto.qss")
+        style_path = os.path.join(PROJECT_ROOT, "asset", "styles", "libretto.qss")
         if os.path.exists(style_path):
             with open(style_path, "r", encoding="utf-8") as f:
                 self.setStyleSheet(self.styleSheet() + "\n" + f.read())
