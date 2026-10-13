@@ -108,13 +108,6 @@ def migrate(project_root: Path, *, write: bool) -> dict[str, int]:
     schedule_paths = sorted((root / "mock_data" / "scadenzario").glob("*.json"))
 
     residents = [(path, _read_json(path)) for path in resident_paths]
-    # Legacy patients start with every resident currently active at Molinette.
-    active_resident_ids = [
-        record["id"]
-        for _, record in residents
-        if record.get("stato") == "Molinette" and isinstance(record.get("id"), str)
-    ]
-
     changed = {"libretti": 0, "pazienti": 0, "scadenzari": 0}
     # Resident qualifications now come from the training-level policy.
     for path, record in residents:
@@ -123,18 +116,24 @@ def migrate(project_root: Path, *, write: bool) -> dict[str, int]:
             if write:
                 _write_json_atomic(path, record)
 
-    # Existing optimization blocks are preserved; defaults are added only when absent.
+    # Preserve existing settings, except the obsolete patient/resident parameter s_ij.
     for path in patient_paths:
         record = _read_json(path)
         _ensure_supported_version(record, path)
         if OPTIMIZATION_KEY not in record:
             record[OPTIMIZATION_KEY] = default_patient_optimization(
                 record.get("urgenza", ""),
-                active_resident_ids,
             )
-            changed["pazienti"] += 1
-            if write:
-                _write_json_atomic(path, record)
+        elif (
+            isinstance(record[OPTIMIZATION_KEY], dict)
+            and "specializzandi_abilitati" in record[OPTIMIZATION_KEY]
+        ):
+            record[OPTIMIZATION_KEY].pop("specializzandi_abilitati")
+        else:
+            continue
+        changed["pazienti"] += 1
+        if write:
+            _write_json_atomic(path, record)
 
     # Monthly schedules need the room and capacity metadata used to build sessions.
     for path in schedule_paths:

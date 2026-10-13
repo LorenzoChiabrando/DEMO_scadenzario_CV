@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import math
-from datetime import date
+from datetime import date, datetime
 from numbers import Real
 
 from .domain import ObjectiveWeights, PatientCategory, SchedulingInput
@@ -79,13 +79,8 @@ def validate_scheduling_input(data: SchedulingInput) -> None:
             errors.append(f"{prefix} requires waiting_time_days and max_wait_days")
         if (patient.waiting_time_days is None) != (patient.max_wait_days is None):
             errors.append(f"{prefix} must define both waiting fields or neither")
-        _validate_optional_integer(
-            errors,
-            prefix,
-            "waiting_time_days",
-            patient.waiting_time_days,
-            allow_zero=True,
-        )
+        if patient.waiting_time_days is not None and not _is_plain_int(patient.waiting_time_days):
+            errors.append(f"{prefix} waiting_time_days must be an integer")
         _validate_optional_integer(
             errors,
             prefix,
@@ -93,25 +88,11 @@ def validate_scheduling_input(data: SchedulingInput) -> None:
             patient.max_wait_days,
             allow_zero=False,
         )
-
-        invalid_qualified_ids = [
-            resident_id
-            for resident_id in patient.qualified_resident_ids
-            if not isinstance(resident_id, str)
-        ]
-        if invalid_qualified_ids:
-            errors.append(
-                f"{prefix} qualified resident identifiers must be strings: "
-                f"{sorted(map(repr, invalid_qualified_ids))}"
-            )
-        qualified_ids = {
-            resident_id
-            for resident_id in patient.qualified_resident_ids
-            if isinstance(resident_id, str)
-        }
-        unknown = qualified_ids - known_residents
-        if unknown:
-            errors.append(f"{prefix} references unknown residents: {sorted(unknown)}")
+        if patient.earliest_surgery_date is not None and (
+            not isinstance(patient.earliest_surgery_date, date)
+            or isinstance(patient.earliest_surgery_date, datetime)
+        ):
+            errors.append(f"{prefix} earliest_surgery_date must be datetime.date")
 
     valid_capacities: list[int] = []
     for session in data.sessions:
@@ -133,6 +114,27 @@ def validate_scheduling_input(data: SchedulingInput) -> None:
             errors.append(f"{prefix} capacity_minutes must be positive")
         else:
             valid_capacities.append(session.capacity_minutes)
+
+        invalid_assigned_ids = [
+            resident_id
+            for resident_id in session.assigned_resident_ids
+            if not isinstance(resident_id, str)
+        ]
+        if invalid_assigned_ids:
+            errors.append(
+                f"{prefix} assigned resident identifiers must be strings: "
+                f"{sorted(map(repr, invalid_assigned_ids))}"
+            )
+        assigned_ids = {
+            resident_id
+            for resident_id in session.assigned_resident_ids
+            if isinstance(resident_id, str)
+        }
+        unknown_assigned = assigned_ids - known_residents
+        if unknown_assigned:
+            errors.append(
+                f"{prefix} references unknown assigned residents: {sorted(unknown_assigned)}"
+            )
 
         if session.available_resident_ids is not None:
             invalid_available_ids = [

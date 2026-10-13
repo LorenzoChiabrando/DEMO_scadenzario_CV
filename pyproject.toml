@@ -6,6 +6,7 @@ testpaths = ["tests"]
 [tool.ruff]
 include = [
     "src/models/id_generator.py",
+    "src/models/patient_plan_state.py",
     "src/calendar_presentation.py",
     "src/importers/**/*.py",
     "src/exports/**/*.py",

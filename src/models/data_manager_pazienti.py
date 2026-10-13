@@ -58,7 +58,6 @@ class DataManagerPazienti:
         if configurazione_modello is None:
             configurazione_modello = default_patient_optimization(
                 dati_form["urgenza"],
-                self._get_specializzandi_attivi_ids(),
             )
 
         nuovo_paziente = {
@@ -162,26 +161,6 @@ class DataManagerPazienti:
         with open(filepath, 'w', encoding='utf-8') as f:
             json.dump(paz, f, indent=4)
         return paz
-
-    def _get_specializzandi_attivi_ids(self):
-        """Restituisce gli ID degli specializzandi attivi."""
-
-        if not os.path.exists(self.dir_libretti):
-            return []
-        resident_ids = []
-        for filename in sorted(os.listdir(self.dir_libretti)):
-            if not filename.endswith(".json"):
-                continue
-            filepath = os.path.join(self.dir_libretti, filename)
-            try:
-                with open(filepath, "r", encoding="utf-8") as stream:
-                    record = json.load(stream)
-            except (OSError, json.JSONDecodeError):
-                continue
-            resident_id = record.get("id")
-            if record.get("stato") == "Molinette" and isinstance(resident_id, str):
-                resident_ids.append(resident_id)
-        return resident_ids
 
     def aggiorna_stato_paziente(self, paz_id: str, stato: str):
         filepath = os.path.join(self.dir_pazienti, f"{paz_id}.json")

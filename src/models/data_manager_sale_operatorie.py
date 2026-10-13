@@ -2,12 +2,20 @@ import json
 import os
 import datetime as dt
 from datetime import datetime
+from pathlib import Path
+
+from src.models.patient_plan_state import patient_status_updates, write_json_batch
 
 
 class DataManagerSaleOperatorie:
     def __init__(self, dir_sale_operatorie="mock_data/sale_operatorie",
-                 filepath_anagrafica="mock_data/static_data/anagrafica_specializzandi.json"):
+                 filepath_anagrafica="mock_data/static_data/anagrafica_specializzandi.json",
+                 dir_pazienti=None):
         self.dir_sale_operatorie = dir_sale_operatorie
+        self.dir_pazienti = (
+            Path(dir_pazienti) if dir_pazienti is not None
+            else Path(dir_sale_operatorie).parent / "pazienti"
+        )
         self.filepath_anagrafica = filepath_anagrafica
         self.specializzandi = self.load_anagrafica()
 
@@ -48,9 +56,16 @@ class DataManagerSaleOperatorie:
         return data
 
     def save_mese(self, anno, mese, data):
-        filepath = self._get_filepath(anno, mese)
-        with open(filepath, 'w', encoding='utf-8') as f:
-            json.dump(data, f, indent=4)
+        filepath = Path(self._get_filepath(anno, mese))
+        updates = {filepath: data}
+        try:
+            updates.update(patient_status_updates(
+                self.dir_pazienti, Path(self.dir_sale_operatorie), updates,
+            ))
+            write_json_batch(updates)
+        except (OSError, TypeError, ValueError):
+            self.invalidate_cache()
+            raise
 
         self._cached_anno = anno
         self._cached_mese = mese

@@ -4,7 +4,11 @@ import json
 from pathlib import Path
 
 from scripts.migrate_platform_json_v1 import migrate
-from src.planning_schema import DEFAULT_COMPLEXITIES_BY_TRAINING_LEVEL, OPTIMIZATION_KEY
+from src.planning_schema import (
+    DEFAULT_COMPLEXITIES_BY_TRAINING_LEVEL,
+    OPTIMIZATION_KEY,
+    default_patient_optimization,
+)
 
 
 def _write_json(path: Path, payload: dict[str, object]) -> None:
@@ -59,3 +63,36 @@ def test_intermediate_level_has_an_explicit_planning_policy() -> None:
         "Media",
         "Alta",
     )
+
+
+def test_new_patient_configuration_has_no_patient_resident_parameter() -> None:
+    assert default_patient_optimization("Alta") == {
+        "versione_schema": 1,
+        "categoria_paper": "I'",
+        "attesa_massima_giorni": 30,
+    }
+
+
+def test_migration_removes_s_only_on_explicit_write_and_preserves_other_fields(
+    tmp_path: Path,
+) -> None:
+    path = tmp_path / "mock_data" / "pazienti" / "P1.json"
+    current = {
+        **default_patient_optimization("Alta"),
+        "attesa_massima_giorni": 42,
+        "campo_futuro": True,
+    }
+    _write_json(path, {
+        "id": "P1",
+        OPTIMIZATION_KEY: {**current, "specializzandi_abilitati": ["R1"]},
+    })
+    before = path.read_bytes()
+
+    assert migrate(tmp_path, write=False)["pazienti"] == 1
+    assert path.read_bytes() == before
+    assert migrate(tmp_path, write=True)["pazienti"] == 1
+    assert json.loads(path.read_text(encoding="utf-8")) == {
+        "id": "P1",
+        OPTIMIZATION_KEY: current,
+    }
+    assert migrate(tmp_path, write=True)["pazienti"] == 0

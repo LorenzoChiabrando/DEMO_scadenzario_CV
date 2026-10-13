@@ -218,6 +218,8 @@ class DialogNuovoPaziente(QDialog):
         self.combo_stato = QComboBox()
         self.combo_stato.setObjectName("ComboDialog")
         self.combo_stato.addItems(["In Attesa", "Completato"])
+        if self._paz_dati and self._paz_dati.get("stato") == "Pianificato":
+            self.combo_stato.addItem("Pianificato")
         self.combo_stato.setFixedHeight(44)
         grp_sta.addWidget(lbl_sta)
         grp_sta.addWidget(self.combo_stato)

@@ -43,7 +43,6 @@ def test_patient_creation_never_overwrites_ids_when_sequence_has_gaps(tmp_path: 
         "versione_schema": 1,
         "categoria_paper": "I'",
         "attesa_massima_giorni": 60,
-        "specializzandi_abilitati": [],
     }
     assert json.loads(existing_path.read_text(encoding="utf-8")) == existing_payload
 

@@ -295,27 +295,31 @@ def _validate_solution(
     session_load: dict[tuple[str, object], list[int]] = {}
     for record in schedule:
         patient = patient_by_id[record.patient_id]
+        if patient.earliest_surgery_date is not None and record.day < patient.earliest_surgery_date:
+            errors.append(
+                f"patient {record.patient_id!r} is scheduled before the insertion date"
+            )
         key = (record.room_id, record.day)
         session_load.setdefault(key, []).append(patient.duration_minutes)
-        if record.resident_id is not None:
-            resident = resident_by_id[record.resident_id]
-            session = session_by_key[record.room_id, record.day.isoformat()]
+        session = session_by_key[record.room_id, record.day.isoformat()]
+        for resident_id in sorted(session.assigned_resident_ids):
+            resident = resident_by_id[resident_id]
             if (
-                session.available_resident_ids is not None
-                and record.resident_id not in session.available_resident_ids
+                patient.procedure_level in resident.qualified_levels
+                and record.resident_id != resident_id
             ):
                 errors.append(
-                    f"resident {record.resident_id!r} is unavailable for session {session.key!r}"
+                    f"patient {record.patient_id!r} requires rostered resident "
+                    f"{resident_id!r} in session {session.key!r} under (1d)"
                 )
-            if record.resident_id not in patient.qualified_resident_ids:
-                errors.append(
-                    f"resident {record.resident_id!r} lacks patient-specific qualification "
-                    f"for {record.patient_id!r}"
-                )
-            if patient.procedure_level not in resident.qualified_levels:
-                errors.append(
-                    f"resident {record.resident_id!r} lacks level {patient.procedure_level!r}"
-                )
+        if (
+            record.resident_id is not None
+            and session.available_resident_ids is not None
+            and record.resident_id not in session.available_resident_ids
+        ):
+            errors.append(
+                f"resident {record.resident_id!r} is unavailable for session {session.key!r}"
+            )
 
     for session in source.sessions:
         durations = session_load.get((session.room_id, session.day), [])

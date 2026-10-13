@@ -3,10 +3,11 @@ from __future__ import annotations
 from collections.abc import Mapping, Sequence
 from copy import deepcopy
 from dataclasses import dataclass, field
-from datetime import date, datetime, timedelta
+from datetime import date, timedelta
 from types import MappingProxyType
 from typing import Any
 
+from src.patient_fields import parse_patient_insertion_date
 from src.planning_schema import (
     DEFAULT_COMPLEXITIES_BY_TRAINING_LEVEL,
     OPTIMIZATION_KEY,
@@ -137,6 +138,7 @@ def build_platform_context(
     resident_records: Sequence[Mapping[str, Any]],
     roster_by_day: Mapping[date, Sequence[RosterAssignment]],
     other_draft_patient_ids: frozenset[str] = frozenset(),
+    current_draft_patient_ids: frozenset[str] = frozenset(),
     policy: PlatformPlanningPolicy | None = None,
 ) -> PlatformPlanningContext:
     """Map one platform week to ``SchedulingInput``."""
@@ -208,10 +210,13 @@ def build_platform_context(
     }
     for patient_id in sorted(patient_record_by_id):
         record = patient_record_by_id[patient_id]
-        if record.get("stato") != "In Attesa":
+        state = record.get("stato")
+        if state not in {"In Attesa", "Pianificato"}:
             continue
         if patient_id in other_draft_patient_ids:
             excluded_count += 1
+            continue
+        if state == "Pianificato" and patient_id not in current_draft_patient_ids:
             continue
 
         configuration = _optimization_configuration(record, "patient", patient_id)
@@ -224,20 +229,6 @@ def build_platform_context(
             "I'''": PatientCategory.RESCHEDULED,
         }[category_label]
 
-        qualified_ids_value = configuration.get("specializzandi_abilitati")
-        if not isinstance(qualified_ids_value, list) or any(
-            not isinstance(resident_id, str) or not resident_id.strip()
-            for resident_id in qualified_ids_value
-        ):
-            raise PlatformDataError(
-                f"patient {patient_id!r} has invalid resident qualifications"
-            )
-        unknown_qualified_ids = set(qualified_ids_value) - set(resident_record_by_id)
-        if unknown_qualified_ids:
-            raise PlatformDataError(
-                f"patient {patient_id!r} references unknown resident identifiers"
-            )
-
         duration = record.get("durata_intervento")
         if not isinstance(duration, int) or isinstance(duration, bool) or duration <= 0:
             raise PlatformDataError(f"patient {patient_id!r} has an invalid duration")
@@ -249,6 +240,7 @@ def build_platform_context(
                 f"patient {patient_id!r} requires a supported procedure complexity; "
                 "completare il campo Complessità nella scheda paziente"
             )
+        inserted = _parse_platform_date(record.get("data_inserimento"), patient_id)
         waiting_time_days = None
         max_wait_days = None
         if category is PatientCategory.WAITING_LIST:
@@ -262,12 +254,7 @@ def build_platform_context(
                     f"patient {patient_id!r} has an invalid maximum waiting time; "
                     "completare Urgenza o attesa_massima_giorni nella scheda paziente"
                 )
-            inserted = _parse_platform_date(record.get("data_inserimento"), patient_id)
             waiting_time_days = (monday - inserted).days
-            if waiting_time_days < 0:
-                raise PlatformDataError(
-                    f"patient {patient_id!r} was inserted after the planning week began"
-                )
 
         candidates.append(
             Patient(
@@ -275,9 +262,9 @@ def build_platform_context(
                 category=category,
                 duration_minutes=duration,
                 procedure_level=complexity,
-                qualified_resident_ids=frozenset(qualified_ids_value) & set(weekly_resident_ids),
                 waiting_time_days=waiting_time_days,
                 max_wait_days=max_wait_days,
+                earliest_surgery_date=inserted,
             )
         )
         mapped_records[patient_id] = record
@@ -291,6 +278,7 @@ def build_platform_context(
             day=day,
             capacity_minutes=assignment.capacity_minutes,
             available_resident_ids=frozenset({assignment.resident_id}),
+            assigned_resident_ids=frozenset({assignment.resident_id}),
         )
         for day in expected_days
         for room_id in active_policy.room_ids
@@ -339,6 +327,11 @@ def map_result_to_platform_plan(
         session_key = (record.day, record.room_id)
         if session_key not in records_by_session:
             raise PlatformDataError("solver returned a session outside the target platform week")
+        earliest = patient_by_id[record.patient_id].earliest_surgery_date
+        if earliest is not None and record.day < earliest:
+            raise PlatformDataError(
+                f"patient {record.patient_id!r} is scheduled before the insertion date"
+            )
         seen_patient_ids.add(record.patient_id)
         records_by_session[session_key].append(record)
 
@@ -490,10 +483,8 @@ def _optimization_configuration(
 
 
 def _parse_platform_date(value: object, patient_id: str) -> date:
-    if not isinstance(value, str):
-        raise PlatformDataError(f"patient {patient_id!r} has no insertion date")
     try:
-        return datetime.strptime(value, "%d/%m/%Y").date()
+        return parse_patient_insertion_date(value)
     except ValueError as exc:
         raise PlatformDataError(f"patient {patient_id!r} has an invalid insertion date") from exc
 

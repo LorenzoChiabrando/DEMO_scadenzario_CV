@@ -6,9 +6,16 @@ from datetime import date, timedelta
 from pathlib import Path
 from types import SimpleNamespace
 
+import pyomo.core as pyo
 import pytest
 
-from src.optimization import HighsSolver, SolveStatus, platform_io, platform_service
+from src.optimization import (
+    HighsSolver,
+    SolveStatus,
+    build_platform_model,
+    platform_io,
+    platform_service,
+)
 from src.optimization.domain import PatientCategory
 from src.optimization.exceptions import (
     PlanningCancelledError,
@@ -229,6 +236,58 @@ def test_loader_infers_h_jl_from_resident_training_level(tmp_path: Path) -> None
     }
 
 
+@pytest.mark.parametrize("monday", [MONDAY, CROSS_MONTH_MONDAY])
+def test_roster_parameter_tracks_the_exact_room_and_day_from_calendar(
+    tmp_path: Path, monday: date,
+) -> None:
+    root = _build_platform_root(tmp_path, monday=monday)
+    swapped_day = monday + timedelta(days=2)
+    source = root / "mock_data" / "scadenzario" / f"{swapped_day:%Y-%m}.json"
+    payload = json.loads(source.read_text(encoding="utf-8"))
+    payload["turni"][swapped_day.isoformat()] = {
+        "Sala Op. I": "Beta R.",
+        "Sala Op. II": "Alpha R.",
+    }
+    _write_json(source, payload)
+
+    context = load_platform_context(root, monday)
+    model = build_platform_model(context.scheduling_input).model
+
+    for session in context.scheduling_input.sessions:
+        expected_id = "R1" if session.room_id == "OR-1" else "R2"
+        if session.day == swapped_day:
+            expected_id = "R2" if expected_id == "R1" else "R1"
+        assert session.assigned_resident_ids == frozenset({expected_id})
+        for resident_id in ("R1", "R2"):
+            value = model.resident_roster_assignment[(resident_id, *session.key)]
+            assert pyo.value(value) == int(resident_id == expected_id)
+
+
+@pytest.mark.parametrize("legacy_ids", [None, [], ["UNKNOWN"], ["R2"]])
+def test_mapper_does_not_require_or_use_obsolete_patient_qualifications(
+    tmp_path: Path, legacy_ids: list[str] | None,
+) -> None:
+    root = _build_platform_root(tmp_path)
+    source = root / "mock_data" / "pazienti" / "P1.json"
+    payload = json.loads(source.read_text(encoding="utf-8"))
+    if legacy_ids is None:
+        payload[OPTIMIZATION_KEY].pop("specializzandi_abilitati")
+    else:
+        payload[OPTIMIZATION_KEY]["specializzandi_abilitati"] = legacy_ids
+    _write_json(source, payload)
+    before = source.read_bytes()
+
+    context = load_platform_context(root, MONDAY)
+    model = build_platform_model(context.scheduling_input).model
+
+    assert not hasattr(model, "patient_resident_qualification")
+    key = ("P1", "R1", "OR-1", MONDAY.isoformat())
+    model.x["P1", "OR-1", MONDAY.isoformat()].set_value(1)
+    model.y[key].set_value(0)
+    assert pyo.value(model.rostered_resident_requirement[key].body) == 1
+    assert source.read_bytes() == before
+
+
 def test_loader_refuses_unknown_resident_training_level(tmp_path: Path) -> None:
     root = _build_platform_root(tmp_path)
     source = root / "mock_data" / "libretti" / "R2.json"
@@ -402,7 +461,7 @@ def test_atomic_writer_preserves_metadata_roster_and_unrelated_days(tmp_path: Pa
         "OR II": "Beta R.",
     }
     assert len(stored["turni"][MONDAY.isoformat()]["operazioni"]) == 2
-    assert len(receipt.backup_paths) == 1
+    assert len(receipt.backup_paths) == 3
     assert receipt.backup_paths[0].exists()
     assert stat.S_IMODE(backup_directory.stat().st_mode) == 0o700
     assert stat.S_IMODE(receipt.backup_paths[0].stat().st_mode) == 0o600
@@ -511,9 +570,10 @@ def test_platform_service_solves_and_persists_end_to_end(tmp_path: Path) -> None
     ]
     assert len(operations) == 2
     assert all("id_specializzando" in operation for operation in operations)
-    assert patient_bytes == {
-        path.name: path.read_bytes() for path in (root / "mock_data" / "pazienti").glob("*.json")
-    }
+    for path in (root / "mock_data" / "pazienti").glob("*.json"):
+        assert json.loads(path.read_text()) == {
+            **json.loads(patient_bytes[path.name]), "stato": "Pianificato",
+        }
 
 
 def test_windows_lock_branch_uses_msvcrt_without_opening_a_directory(

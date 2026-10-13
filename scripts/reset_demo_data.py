@@ -86,7 +86,6 @@ def build_demo_snapshot(reference: date) -> dict[str, str]:
         for index, (first_name, surname) in enumerate(DEMO_RESIDENT_NAMES, 1)
     ]
     names = [f"{resident['cognome']} {resident['nome'][0]}." for resident in residents]
-    ids = [resident["id"] for resident in residents]
     rosters: dict[str, dict] = {}
     rooms: dict[str, dict] = {}
     for month in months:
@@ -162,7 +161,7 @@ def build_demo_snapshot(reference: date) -> dict[str, str]:
             "data_inserimento": (last_week - timedelta(days=14 + index)).strftime("%d/%m/%Y"),
             "note": "Dati inventati per la demo.",
             "dati_sintetici": True,
-            OPTIMIZATION_KEY: default_patient_optimization(urgency, ids),
+            OPTIMIZATION_KEY: default_patient_optimization(urgency),
         }
         patients.append(patient)
         if index > len(operation_days):

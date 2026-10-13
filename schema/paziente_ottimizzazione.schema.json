@@ -11,8 +11,7 @@
             "required": [
                 "versione_schema",
                 "categoria_paper",
-                "attesa_massima_giorni",
-                "specializzandi_abilitati"
+                "attesa_massima_giorni"
             ],
             "properties": {
                 "versione_schema": {"const": 1},
@@ -23,6 +22,8 @@
                     "minimum": 1
                 },
                 "specializzandi_abilitati": {
+                    "description": "Campo legacy ignorato dal planner; rimosso dalla migrazione esplicita.",
+                    "deprecated": true,
                     "type": "array",
                     "items": {"type": "string", "minLength": 1},
                     "uniqueItems": true

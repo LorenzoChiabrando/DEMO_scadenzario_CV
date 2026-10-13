@@ -11,6 +11,7 @@ from src.controllers.controller_sale_operatorie import ControllerSaleOperatorie
 
 def _operation(name: str, duration: int, room_id: str = "OR-1") -> dict[str, object]:
     return {
+        "id_paziente": f"P-{name}",
         "nome_paziente": name,
         "durata": duration,
         "sala_operatoria": room_id,
@@ -65,7 +66,11 @@ def _controller(model: _FakeModel):
     controller.modalita_corrente = "PIANIFICAZIONE"
     controller._stato_corrente = "BOZZA"
     controller.settimana_display = dt.date(2026, 5, 4)
-    controller.model_paz = None
+    controller.model_paz = SimpleNamespace(
+        get_paziente_by_id=lambda identifier: {
+            "id": identifier, "data_inserimento": "01/05/2026",
+        },
+    )
     controller.model_lib = None
     warnings: list[tuple[str, str]] = []
     refreshes: list[bool] = []

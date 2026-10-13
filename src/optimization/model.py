@@ -23,11 +23,12 @@ class _BuildOptions:
     use_configured_objective: bool = False
     include_changeover: bool = False
     include_session_availability: bool = False
+    include_patient_dates: bool = False
     max_operations_per_session: int | None = None
 
 
 def build_paper_model(data: SchedulingInput) -> BuiltSchedulingModel:
-    """Build (1a)-(1g) and (6), rejecting settings outside the paper model."""
+    """Build (1a)-(1g) and (6) with the roster-based replacement of (1d)."""
 
     validate_scheduling_input(data)
     errors: list[str] = []
@@ -39,7 +40,12 @@ def build_paper_model(data: SchedulingInput) -> BuiltSchedulingModel:
     if any(session.available_resident_ids is not None for session in data.sessions):
         errors.append(
             "build_paper_model does not include daily specialist availability; "
-            "use build_platform_model for roster constraints"
+            "use build_platform_model for platform availability bounds"
+        )
+    if any(patient.earliest_surgery_date is not None for patient in data.patients):
+        errors.append(
+            "build_paper_model does not include patient insertion dates; "
+            "use build_platform_model for patient date bounds"
         )
     if data.objective_weights != ObjectiveWeights():
         errors.append(
@@ -56,7 +62,7 @@ def build_platform_model(
     *,
     max_operations_per_session: int | None = None,
 ) -> BuiltSchedulingModel:
-    """Build the paper core with platform availability, changeover and row limits."""
+    """Build the paper core with platform date, availability, changeover and row limits."""
 
     validate_scheduling_input(data)
     if max_operations_per_session is not None and (
@@ -71,6 +77,7 @@ def build_platform_model(
             use_configured_objective=True,
             include_changeover=True,
             include_session_availability=True,
+            include_patient_dates=True,
             max_operations_per_session=max_operations_per_session,
         ),
     )
@@ -173,7 +180,7 @@ def _build_model(data: SchedulingInput, options: _BuildOptions) -> BuiltScheduli
             )
             for patient_id in patient_ids
         },
-        within=pyo.NonNegativeReals,
+        within=pyo.Reals,
     )
     model.capacity_minutes = pyo.Param(
         model.SESSIONS,
@@ -190,16 +197,17 @@ def _build_model(data: SchedulingInput, options: _BuildOptions) -> BuiltScheduli
         },
         within=pyo.Binary,
     )
-    model.patient_resident_qualification = pyo.Param(
-        model.PATIENTS,
+    model.resident_roster_assignment = pyo.Param(
         model.RESIDENTS,
+        model.ROOMS,
+        model.DAYS,
         initialize={
-            (patient_id, resident_id): int(
-                resident_id in patient_by_id[patient_id].qualified_resident_ids
-            )
-            for patient_id in patient_ids
+            (resident_id, room_id, day): 1
             for resident_id in resident_ids
+            for room_id, day in session_keys
+            if resident_id in session_by_key[room_id, day].assigned_resident_ids
         },
+        default=0,
         within=pyo.Binary,
     )
 
@@ -269,30 +277,29 @@ def _build_model(data: SchedulingInput, options: _BuildOptions) -> BuiltScheduli
 
     model.session_capacity = pyo.Constraint(model.ROOMS, model.DAYS, rule=capacity_rule)
 
-    def resident_compatibility_rule(
+    def rostered_resident_requirement_rule(
         m: pyo.ConcreteModel,
         patient_id: str,
         resident_id: str,
         room_id: str,
         day: str,
     ) -> pyo.Expression:
-        """Equation (1d): Y_ijkt <= X_ikt h_j,f_i s_ij."""
+        """Modified (1d): A_jkt h_j,f_i X_ikt <= Y_ijkt."""
 
         level = patient_by_id[patient_id].procedure_level
-        compatibility = (
-            m.resident_level_qualification[resident_id, level]
-            * m.patient_resident_qualification[patient_id, resident_id]
-        )
-        return m.y[patient_id, resident_id, room_id, day] <= (
-            m.x[patient_id, room_id, day] * compatibility
+        return (
+            m.resident_roster_assignment[resident_id, room_id, day]
+            * m.resident_level_qualification[resident_id, level]
+            * m.x[patient_id, room_id, day]
+            <= m.y[patient_id, resident_id, room_id, day]
         )
 
-    model.resident_compatibility = pyo.Constraint(
+    model.rostered_resident_requirement = pyo.Constraint(
         model.PATIENTS,
         model.RESIDENTS,
         model.ROOMS,
         model.DAYS,
-        rule=resident_compatibility_rule,
+        rule=rostered_resident_requirement_rule,
     )
 
     def resident_coverage_rule(
@@ -394,6 +401,31 @@ def _build_model(data: SchedulingInput, options: _BuildOptions) -> BuiltScheduli
             model.ROOMS,
             model.DAYS,
             rule=session_availability_rule,
+        )
+
+    if options.include_patient_dates and any(
+        patient.earliest_surgery_date is not None for patient in data.patients
+    ):
+        blocked_sessions = tuple(
+            (patient.patient_id, room_id, day)
+            for patient in data.patients
+            if patient.earliest_surgery_date is not None
+            for room_id, day in session_keys
+            if session_by_key[room_id, day].day < patient.earliest_surgery_date
+        )
+        model.PRE_INSERTION_SESSIONS = pyo.Set(
+            initialize=blocked_sessions, dimen=3, ordered=True,
+        )
+
+        def patient_date_rule(
+            m: pyo.ConcreteModel, patient_id: str, room_id: str, day: str,
+        ) -> pyo.Expression:
+            """Platform rule: X_ikt = 0 on dates before patient insertion."""
+
+            return m.x[patient_id, room_id, day] == 0
+
+        model.platform_patient_date = pyo.Constraint(
+            model.PRE_INSERTION_SESSIONS, rule=patient_date_rule,
         )
 
     if options.max_operations_per_session is not None:

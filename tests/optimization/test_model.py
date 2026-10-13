@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from dataclasses import replace
 from datetime import date, timedelta
+from itertools import product
 
 import pyomo.core as pyo
 import pytest
@@ -35,7 +36,6 @@ def _model_input(
                 PatientCategory.WAITING_LIST,
                 60,
                 "low",
-                frozenset({"R-LOW", "R-HIGH"}),
                 waiting_time_days=5,
                 max_wait_days=20,
             ),
@@ -44,7 +44,6 @@ def _model_input(
                 PatientCategory.MANDATORY,
                 90,
                 "high",
-                frozenset({"R-HIGH"}),
                 waiting_time_days=10,
                 max_wait_days=20,
             ),
@@ -53,7 +52,6 @@ def _model_input(
                 PatientCategory.RESCHEDULED,
                 30,
                 "high",
-                frozenset({"R-HIGH"}),
             ),
         ),
         residents=(
@@ -66,6 +64,7 @@ def _model_input(
                 monday + timedelta(days=offset),
                 180,
                 available_resident_ids=available,
+                assigned_resident_ids=frozenset({"R-LOW" if offset == 0 else "R-HIGH"}),
             )
             for offset in range(2)
         ),
@@ -113,7 +112,7 @@ def test_paper_model_has_all_seven_constraint_families() -> None:
     assert len(model.waiting_patient_once) == 1  # (1a)
     assert len(model.required_patient_once) == 2  # (1b)
     assert len(model.session_capacity) == 2  # (1c)
-    assert len(model.resident_compatibility) == 12  # (1d)
+    assert len(model.rostered_resident_requirement) == 12  # (1d)
     assert len(model.resident_coverage) == 6  # (1e)
     assert len(model.at_most_one_resident) == 6  # (1f)
     assert len(model.fairness_floor_definition) == 2  # (1g)
@@ -125,7 +124,7 @@ def test_paper_model_has_all_seven_constraint_families() -> None:
     assert not hasattr(model, "session_used")
 
 
-def test_equations_1a_to_1d_have_the_printed_coefficients() -> None:
+def test_equations_1a_to_1c_keep_the_printed_coefficients() -> None:
     model = build_paper_model(_model_input()).model
 
     waiting = model.waiting_patient_once["P-WAIT"]
@@ -147,37 +146,63 @@ def test_equations_1a_to_1d_have_the_printed_coefficients() -> None:
         "x[P-RESCHEDULED,OR-1,2026-08-10]": 30.0,
     }
 
-    compatible = model.resident_compatibility["P-WAIT", "R-LOW", "OR-1", "2026-08-10"]
-    assert compatible.lower is None
-    assert pyo.value(compatible.upper) == 0
-    assert _coefficients(compatible.body) == {
-        "y[P-WAIT,R-LOW,OR-1,2026-08-10]": 1.0,
-        "x[P-WAIT,OR-1,2026-08-10]": -1.0,
-    }
 
-    incompatible = model.resident_compatibility["P-WAIT", "R-HIGH", "OR-1", "2026-08-10"]
-    assert _coefficients(incompatible.body) == {"y[P-WAIT,R-HIGH,OR-1,2026-08-10]": 1.0}
+def test_roster_parameter_is_binary_indexed_by_resident_room_day_and_replaces_s() -> None:
+    data = _model_input()
+    model = build_paper_model(data).model
 
-
-def test_equation_1d_blocks_patient_specific_incompatibility_when_level_matches() -> None:
-    source = _model_input()
-    patients = tuple(
-        replace(patient, qualified_resident_ids=frozenset({"R-LOW"}))
-        if patient.patient_id == "P-MANDATORY"
-        else patient
-        for patient in source.patients
+    assert model.resident_roster_assignment.domain is pyo.Binary
+    assert not model.resident_roster_assignment.mutable
+    assert set(model.resident_roster_assignment) == set(
+        product(model.RESIDENTS, model.ROOMS, model.DAYS)
     )
-    model = build_paper_model(replace(source, patients=patients)).model
+    assert pyo.value(model.resident_roster_assignment["R-LOW", "OR-1", "2026-08-10"]) == 1
+    assert pyo.value(model.resident_roster_assignment["R-LOW", "OR-1", "2026-08-11"]) == 0
+    assert pyo.value(model.resident_roster_assignment["R-HIGH", "OR-1", "2026-08-10"]) == 0
+    assert pyo.value(model.resident_roster_assignment["R-HIGH", "OR-1", "2026-08-11"]) == 1
+    assert not hasattr(model, "patient_resident_qualification")
+    assert not hasattr(model, "resident_compatibility")
+    assert not hasattr(data.patients[0], "qualified_resident_ids")
 
-    assert pyo.value(model.resident_level_qualification["R-HIGH", "high"]) == 1
-    assert pyo.value(model.patient_resident_qualification["P-MANDATORY", "R-HIGH"]) == 0
-    constraint = model.resident_compatibility[
-        "P-MANDATORY", "R-HIGH", "OR-1", "2026-08-10"
-    ]
-    assert _coefficients(constraint.body) == {
-        "y[P-MANDATORY,R-HIGH,OR-1,2026-08-10]": 1.0
-    }
+
+@pytest.mark.parametrize("builder", [build_paper_model, build_platform_model])
+@pytest.mark.parametrize(("assigned", "qualified"), tuple(product((0, 1), repeat=2)))
+def test_equation_1d_has_exact_roster_coefficients_and_truth_table(
+    builder, assigned: int, qualified: int,
+) -> None:
+    source = _model_input()
+    resident = Resident("R-LOW", frozenset({"low"}) if qualified else frozenset({"high"}))
+    session = replace(
+        source.sessions[0],
+        assigned_resident_ids=frozenset({"R-LOW"}) if assigned else frozenset(),
+    )
+    model = builder(
+        replace(source, patients=(source.patients[0],), residents=(resident,), sessions=(session,))
+    ).model
+    key = ("P-WAIT", "R-LOW", "OR-1", "2026-08-10")
+    constraint = model.rostered_resident_requirement[key]
+    expected = {"y[P-WAIT,R-LOW,OR-1,2026-08-10]": -1.0}
+    if assigned * qualified:
+        expected["x[P-WAIT,OR-1,2026-08-10]"] = 1.0
+    assert constraint.lower is None
     assert pyo.value(constraint.upper) == 0
+    assert _coefficients(constraint.body) == expected
+
+    for x_value, y_value in product((0, 1), repeat=2):
+        model.x["P-WAIT", "OR-1", "2026-08-10"].set_value(x_value)
+        model.y[key].set_value(y_value)
+        is_feasible = pyo.value(constraint.body) <= 1e-9
+        assert is_feasible == (assigned * qualified * x_value <= y_value)
+
+
+def test_missing_roster_assignments_mean_a_zero_not_all_residents_assigned() -> None:
+    source = _model_input()
+    sessions = tuple(
+        replace(session, assigned_resident_ids=frozenset()) for session in source.sessions
+    )
+    model = build_paper_model(replace(source, sessions=sessions)).model
+
+    assert all(pyo.value(value) == 0 for value in model.resident_roster_assignment.values())
 
 
 def test_equations_1e_and_1f_remain_separate_inequalities() -> None:

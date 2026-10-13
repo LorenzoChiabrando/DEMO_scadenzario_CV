@@ -15,18 +15,19 @@ class PatientCategory(str, Enum):
 
 @dataclass(frozen=True, slots=True)
 class Patient:
-    """Surgical case; durations are minutes and waiting times are whole days."""
+    """Surgical case with signed waiting days and an optional first permitted date.
+
+    Durations are minutes. ``earliest_surgery_date`` is inclusive and is enforced
+    by the platform model; ``None`` leaves the patient dates unrestricted.
+    """
 
     patient_id: str
     category: PatientCategory
     duration_minutes: int
     procedure_level: str
-    qualified_resident_ids: frozenset[str] = field(default_factory=frozenset)
     waiting_time_days: int | None = None
     max_wait_days: int | None = None
-
-    def __post_init__(self) -> None:
-        object.__setattr__(self, "qualified_resident_ids", frozenset(self.qualified_resident_ids))
+    earliest_surgery_date: date | None = None
 
     @property
     def urgency(self) -> float:
@@ -39,7 +40,7 @@ class Patient:
 
 @dataclass(frozen=True, slots=True)
 class Resident:
-    """Resident and allowed procedure levels."""
+    """Resident and procedure-level qualifications h_jl used by (1d)."""
 
     resident_id: str
     qualified_levels: frozenset[str]
@@ -50,14 +51,21 @@ class Resident:
 
 @dataclass(frozen=True, slots=True)
 class Session:
-    """Operating-room capacity, in minutes, for one day."""
+    """Room/day capacity in minutes, roster A_jkt and optional platform availability.
+
+    ``assigned_resident_ids`` contains exactly the residents with A_jkt=1.
+    An empty set means no roster assignment; it does not mean everyone is assigned.
+    ``available_resident_ids=None`` leaves the platform availability unrestricted.
+    """
 
     room_id: str
     day: date
     capacity_minutes: int
     available_resident_ids: frozenset[str] | None = None
+    assigned_resident_ids: frozenset[str] = field(default_factory=frozenset)
 
     def __post_init__(self) -> None:
+        object.__setattr__(self, "assigned_resident_ids", frozenset(self.assigned_resident_ids))
         if self.available_resident_ids is not None:
             object.__setattr__(
                 self,

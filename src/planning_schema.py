@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-from collections.abc import Iterable
 from copy import deepcopy
 from typing import Any
 
@@ -31,10 +30,7 @@ _DEFAULT_ROOMS: dict[str, dict[str, Any]] = {
 }
 
 
-def default_patient_optimization(
-    urgency: str,
-    qualified_resident_ids: Iterable[str],
-) -> dict[str, Any]:
+def default_patient_optimization(urgency: str) -> dict[str, Any]:
     """Return v1 fields; unclassified urgency leaves the maximum waiting time unset."""
 
     max_wait = DEFAULT_MAX_WAIT_DAYS.get(urgency)
@@ -44,7 +40,6 @@ def default_patient_optimization(
         "versione_schema": SCHEMA_VERSION,
         "categoria_paper": "I'",
         "attesa_massima_giorni": max_wait,
-        "specializzandi_abilitati": sorted(set(qualified_resident_ids)),
     }
 
 

@@ -21,6 +21,7 @@ from src.calendar_presentation import (
 )
 from src.exports.calendar_pdf import CalendarPdfDocument, CalendarPdfRow, write_calendar_pdf
 from src.optimization.platform_service import plan_platform_week
+from src.patient_fields import parse_patient_insertion_date
 from src.planning_schema import OPTIMIZATION_KEY
 from src.workers.platform_planning_worker import (
     PlanningService,
@@ -964,6 +965,22 @@ class ControllerSaleOperatorie(QObject):
             return _str_to_min("08:00")
         return _str_to_min(room_operations[-1]["ora_fine"]) + CHANGEOVER_MINUTES
 
+    @staticmethod
+    def _patient_date_error(patient: dict | None, day: datetime.date) -> str:
+        """Explain why a patient cannot be scheduled on this date, or return an empty string."""
+        if not patient:
+            return "Impossibile verificare la data di inserimento: scheda paziente non disponibile."
+        try:
+            inserted = parse_patient_insertion_date(patient.get("data_inserimento"))
+        except ValueError:
+            return "La scheda paziente non contiene una data di inserimento valida."
+        if day < inserted:
+            return (
+                "Non è possibile programmare il paziente prima della sua data di inserimento "
+                f"({inserted.strftime('%d/%m/%Y')})."
+            )
+        return ""
+
     def _scambia_operazioni(self, col: int, src_idx: int, dst_idx: int):
         """Swap di due operazioni nello stesso giorno, con conferma modal."""
         if (self.modalita_corrente not in ("PIANIFICAZIONE", "CONSULTAZIONE")
@@ -1021,6 +1038,16 @@ class ControllerSaleOperatorie(QObject):
         original_dst_ops = copy.deepcopy(self.model.get_operazioni(dst_str))
 
         if src_op_idx >= len(original_src_ops):
+            return
+
+        patient_id = original_src_ops[src_op_idx].get("id_paziente")
+        patient = (
+            self.model_paz.get_paziente_by_id(patient_id)
+            if self.model_paz is not None and patient_id else None
+        )
+        date_error = self._patient_date_error(patient, dst_date)
+        if date_error:
+            self._avviso("Data non consentita", date_error, tipo="warning")
             return
 
         moved_room = self._room_id(original_src_ops[src_op_idx])
@@ -1304,6 +1331,12 @@ class ControllerSaleOperatorie(QObject):
             if not paz:
                 return
             paz_sel[0] = paz
+            date_error = self._patient_date_error(paz, data_col)
+            if date_error:
+                lbl_timing.setText(date_error)
+                lbl_timing.setStyleSheet("color:#dc2626; font-weight:bold;")
+                btn_inserisci.setEnabled(False)
+                return
             durata = paz.get("durata_intervento", 90)
             room_id = combo_room.currentText()
             ora_inizio_min = starts_by_room[room_id]
@@ -1356,6 +1389,11 @@ class ControllerSaleOperatorie(QObject):
         room_id: str,
     ):
         import random as _rnd
+        day = datetime.date.fromisoformat(data_str)
+        date_error = self._patient_date_error(paz, day)
+        if date_error:
+            self._avviso("Data non consentita", date_error, tipo="warning", parent=dialog)
+            return
         operazioni = self.model.get_operazioni(data_str)
         if sum(self._room_id(operation) == room_id for operation in operazioni) >= (
             MAX_OPERATIONS_PER_ROOM
@@ -1369,7 +1407,6 @@ class ControllerSaleOperatorie(QObject):
             return
         durata = paz.get("durata_intervento", 90)
         ora_fine_min = ora_inizio_min + durata
-        day = datetime.date.fromisoformat(data_str)
         session_end = _str_to_min("08:00") + self._capacity_for_room(day, room_id)
         if ora_fine_min > session_end:
             self._avviso(

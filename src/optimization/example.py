@@ -22,7 +22,6 @@ def build_example_input() -> SchedulingInput:
             PatientCategory.WAITING_LIST,
             120,
             "high",
-            frozenset({"R-JUNIOR", "R-SENIOR"}),
             waiting_time_days=25,
             max_wait_days=30,
         ),
@@ -31,7 +30,6 @@ def build_example_input() -> SchedulingInput:
             PatientCategory.WAITING_LIST,
             90,
             "low",
-            frozenset({"R-JUNIOR"}),
             waiting_time_days=10,
             max_wait_days=30,
         ),
@@ -40,18 +38,24 @@ def build_example_input() -> SchedulingInput:
             PatientCategory.MANDATORY,
             60,
             "medium",
-            frozenset({"R-JUNIOR"}),
         ),
         Patient(
             "P-RESCHEDULED",
             PatientCategory.RESCHEDULED,
             60,
             "high",
-            frozenset({"R-SENIOR"}),
         ),
     )
     monday = date(2026, 8, 10)
-    sessions = tuple(Session("OR-1", monday + timedelta(days=offset), 300) for offset in range(2))
+    sessions = tuple(
+        Session(
+            "OR-1",
+            monday + timedelta(days=offset),
+            300,
+            assigned_resident_ids=frozenset({resident.resident_id}),
+        )
+        for offset, resident in enumerate(residents)
+    )
     return SchedulingInput(
         patients=patients,
         residents=residents,

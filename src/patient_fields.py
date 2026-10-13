@@ -3,9 +3,21 @@
 from __future__ import annotations
 
 import re
+from datetime import date, datetime
 
 DEFAULT_INTERVENTION_MINUTES = 90
 UNCLASSIFIED = "Da classificare"
+
+
+def parse_patient_insertion_date(value: object) -> date:
+    """Parse the platform's DD/MM/YYYY insertion date; reject missing/invalid values."""
+
+    if not isinstance(value, str):
+        raise ValueError("patient insertion date is missing")
+    try:
+        return datetime.strptime(value, "%d/%m/%Y").date()
+    except ValueError as exc:
+        raise ValueError("patient insertion date must be a valid DD/MM/YYYY date") from exc
 
 
 def normalize_diagnosis(code: str, description: str) -> tuple[str, str, str]:

@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import os
 import tempfile
+from collections import Counter
 from contextlib import contextmanager
 from copy import deepcopy
 from dataclasses import dataclass
@@ -11,6 +12,10 @@ from pathlib import Path
 from typing import Any
 from uuid import uuid4
 
+from src.models.patient_plan_state import (
+    draft_patient_ids_by_week,
+    patient_status_updates,
+)
 from src.planning_schema import OPTIMIZATION_KEY, SCHEMA_VERSION
 
 if os.name == "nt":
@@ -93,12 +98,18 @@ def load_platform_context(
         root / "mock_data" / "sale_operatorie",
         excluded_monday=monday,
     )
+    sale_months = {
+        path.stem: _read_json(path)
+        for path in sorted((root / "mock_data" / "sale_operatorie").glob("????-??.json"))
+    }
+    current_draft_patient_ids = draft_patient_ids_by_week(sale_months).get(monday, set())
     return build_platform_context(
         monday=monday,
         patient_records=patient_records,
         resident_records=resident_records,
         roster_by_day=roster_by_day,
         other_draft_patient_ids=frozenset(other_draft_patient_ids),
+        current_draft_patient_ids=frozenset(current_draft_patient_ids),
         policy=active_policy,
     )
 
@@ -185,17 +196,30 @@ def persist_platform_week_plan(
             "settimane", {}
         )[week_key] = "BOZZA"
 
+        updates = {
+            destination: updated[year, month]
+            for (year, month), destination in zip(affected_months, paths, strict=True)
+        }
+        try:
+            patient_updates = patient_status_updates(
+                root / "mock_data" / "pazienti", sale_directory, updates,
+            )
+        except (OSError, TypeError, ValueError) as exc:
+            raise PlatformPersistenceError("cannot prepare patient planning states") from exc
+        originals.update({path: path.read_bytes() for path in patient_updates})
+        updates.update(patient_updates)
         backup_paths = _write_private_backups(originals, backup_root)
         temporary_paths: dict[Path, Path] = {}
         try:
-            for (year, month), destination in zip(affected_months, paths, strict=True):
+            for destination, payload in updates.items():
                 temporary_paths[destination] = _write_json_temporary(
                     destination,
-                    updated[year, month],
+                    payload,
                 )
-            for destination in paths:
+            for destination in updates:
                 os.replace(temporary_paths[destination], destination)
-            _fsync_directory(sale_directory)
+            for directory in {path.parent for path in updates}:
+                _fsync_directory(directory)
         except Exception as exc:
             _restore_originals(originals)
             raise PlatformPersistenceError(
@@ -205,7 +229,7 @@ def persist_platform_week_plan(
             for temporary in temporary_paths.values():
                 temporary.unlink(missing_ok=True)
 
-    return PlatformWriteReceipt(updated_paths=paths, backup_paths=backup_paths)
+    return PlatformWriteReceipt(updated_paths=tuple(updates), backup_paths=backup_paths)
 
 
 def _read_catalog(directory: Path) -> tuple[JsonObject, ...]:
@@ -412,10 +436,14 @@ def _write_private_backups(
     backup_root.mkdir(parents=True, exist_ok=True, mode=0o700)
     os.chmod(backup_root, 0o700)
     backups: list[Path] = []
+    name_counts = Counter(path.name for path in originals)
     for source, payload in originals.items():
         if payload is None:
             continue
         destination = backup_root / source.name
+        if name_counts[source.name] > 1:
+            destination = backup_root / source.parent.name / source.name
+            destination.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
         destination.write_bytes(payload)
         os.chmod(destination, 0o600)
         backups.append(destination)
