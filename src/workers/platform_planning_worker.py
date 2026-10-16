@@ -65,6 +65,6 @@ class PlatformPlanningWorker(QThread):
             self.failed.emit(str(exc))
         except Exception:
             _LOGGER.exception("Unexpected failure in the platform planning worker")
-            self.failed.emit("Unexpected error while generating the weekly plan")
+            self.failed.emit("Errore imprevisto durante la generazione del piano settimanale.")
         else:
             self.succeeded.emit(result)

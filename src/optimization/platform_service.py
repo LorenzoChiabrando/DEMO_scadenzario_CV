@@ -78,4 +78,4 @@ def plan_platform_week(
 
 def _raise_if_cancelled(cancel_requested: Callable[[], bool] | None) -> None:
     if cancel_requested is not None and cancel_requested():
-        raise PlanningCancelledError("planning was cancelled before persistence")
+        raise PlanningCancelledError("Pianificazione annullata prima del salvataggio.")

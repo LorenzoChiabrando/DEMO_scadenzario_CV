@@ -3,11 +3,10 @@ from __future__ import annotations
 from pathlib import Path
 
 import pytest
-from PySide6.QtCore import QByteArray, QMimeData
+from PySide6.QtCore import QByteArray, QMimeData, Qt
 from PySide6.QtWidgets import QApplication, QDialog, QLabel, QPushButton, QSpinBox, QWidget
 
 from src.controllers.controller_sale_operatorie import ControllerSaleOperatorie
-from src.views.components.combo_delegate import SmartComboBoxDelegate
 from src.views.dialog_bulk_pazienti import _COL_DUR, DialogBulkPazienti
 from src.views.view_libretto import ViewLibretto
 from src.views.view_nuovo_paziente import DialogNuovoPaziente
@@ -230,20 +229,15 @@ def test_intermediate_training_level_is_available(qt_app: QApplication) -> None:
 
 def test_month_roster_uses_new_labels_and_compact_controls(qt_app: QApplication) -> None:
     view = ViewScadenzario()
-    view.tabella.setColumnCount(31)
     view.resize(1200, 800)
-    delegate = SmartComboBoxDelegate(["Bianchi A."], view.tabella)
-    delegate.set_compact(True)
-    view.tabella.setItemDelegateForRow(2, delegate)
     view.set_compact_mode(True)
 
-    assert view.tabella.verticalHeaderItem(2).text() == "I Rep"
-    assert view.tabella.verticalHeaderItem(3).text() == "II Rep"
-    assert delegate.displayText("Bianchi A.", None) == "BA"
+    model = view.tabella.model()
+    assert model.headerData(2, Qt.Orientation.Vertical) == "I Rep"
+    assert model.headerData(3, Qt.Orientation.Vertical) == "II Rep"
     assert view.btn_vista_mese.isChecked()
     assert view.btn_esporta_pdf.text() == "Esporta PDF"
     view.deleteLater()
-
 
 def test_operating_rooms_offer_read_only_month_overview(qt_app: QApplication) -> None:
     view = ViewSaleOperatorie()

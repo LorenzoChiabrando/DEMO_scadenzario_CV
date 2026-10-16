@@ -295,7 +295,7 @@ def test_loader_refuses_unknown_resident_training_level(tmp_path: Path) -> None:
     payload["livello"] = "Non configurato"
     _write_json(source, payload)
 
-    with pytest.raises(PlatformDataError, match="unsupported training level"):
+    with pytest.raises(PlatformDataError, match="livello formativo non gestito"):
         load_platform_context(root, MONDAY)
 
 
@@ -306,7 +306,7 @@ def test_loader_refuses_unclassified_patient_complexity(tmp_path: Path) -> None:
     payload["complessita"] = "Da classificare"
     _write_json(source, payload)
 
-    with pytest.raises(PlatformDataError, match="requires a supported procedure complexity"):
+    with pytest.raises(PlatformDataError, match="complessità non gestita"):
         load_platform_context(root, MONDAY)
 
 
@@ -365,7 +365,7 @@ def test_loader_refuses_non_convalidated_scadenzario_without_touching_target(
     target = root / "mock_data" / "sale_operatorie" / "2026-05.json"
     before = target.read_bytes()
 
-    with pytest.raises(PlatformDataError, match=r"must be convalidated.*2026-05"):
+    with pytest.raises(PlatformDataError, match=r"convalidare lo scadenzario di: maggio 2026"):
         load_platform_context(root, MONDAY)
 
     assert target.read_bytes() == before
@@ -384,7 +384,8 @@ def test_cross_month_week_requires_both_scadenzario_months(
     target_directory = root / "mock_data" / "sale_operatorie"
     before = {path.name: path.read_bytes() for path in target_directory.glob("*.json")}
 
-    with pytest.raises(PlatformDataError, match=unconfirmed_month):
+    month_label = {"2026-06": "giugno 2026", "2026-07": "luglio 2026"}[unconfirmed_month]
+    with pytest.raises(PlatformDataError, match=f"convalidare lo scadenzario di: {month_label}"):
         load_platform_context(root, CROSS_MONTH_MONDAY)
 
     assert before == {path.name: path.read_bytes() for path in target_directory.glob("*.json")}
@@ -401,7 +402,7 @@ def test_writer_rechecks_scadenzario_state_immediately_before_commit(tmp_path: P
     target = root / "mock_data" / "sale_operatorie" / "2026-05.json"
     before = target.read_bytes()
 
-    with pytest.raises(PlatformDataError, match=r"must be convalidated.*2026-05"):
+    with pytest.raises(PlatformDataError, match=r"convalidare lo scadenzario di: maggio 2026"):
         persist_platform_week_plan(root, plan, overwrite=True)
 
     assert target.read_bytes() == before
@@ -421,7 +422,7 @@ def test_cross_month_writer_refuses_any_convalidated_target_month(tmp_path: Path
     target_directory = root / "mock_data" / "sale_operatorie"
     before = {path.name: path.read_bytes() for path in target_directory.glob("*.json")}
 
-    with pytest.raises(PlatformPersistenceError, match=r"target.*convalidated.*2026-07"):
+    with pytest.raises(PlatformPersistenceError, match=r"già convalidate: luglio 2026"):
         persist_platform_week_plan(root, plan, overwrite=True)
 
     assert before == {path.name: path.read_bytes() for path in target_directory.glob("*.json")}
@@ -434,7 +435,7 @@ def test_atomic_writer_requires_explicit_overwrite(tmp_path: Path) -> None:
     target = root / "mock_data" / "sale_operatorie" / "2026-05.json"
     before = target.read_bytes()
 
-    with pytest.raises(PlatformPersistenceError, match="explicit overwrite"):
+    with pytest.raises(PlatformPersistenceError, match="conferma la sovrascrittura"):
         persist_platform_week_plan(root, plan, overwrite=False)
 
     assert target.read_bytes() == before
@@ -474,7 +475,7 @@ def test_atomic_writer_refuses_convalidated_week_without_changes(tmp_path: Path)
     target = root / "mock_data" / "sale_operatorie" / "2026-05.json"
     before = target.read_bytes()
 
-    with pytest.raises(PlatformPersistenceError, match="week is convalidated"):
+    with pytest.raises(PlatformPersistenceError, match="settimana è già convalidata"):
         persist_platform_week_plan(root, plan, overwrite=True)
 
     assert target.read_bytes() == before
@@ -495,7 +496,7 @@ def test_atomic_writer_rolls_back_after_temporary_write_failure(
 
     monkeypatch.setattr(platform_io, "_write_json_temporary", fail_write)
 
-    with pytest.raises(PlatformPersistenceError, match="rolled back"):
+    with pytest.raises(PlatformPersistenceError, match="dati precedenti sono stati ripristinati"):
         persist_platform_week_plan(
             root,
             plan,
@@ -526,7 +527,7 @@ def test_platform_service_cancellation_after_solve_does_not_persist(
 
     monkeypatch.setattr(platform_service, "HighsSolver", CancellingSolver)
 
-    with pytest.raises(PlanningCancelledError, match="cancelled before persistence"):
+    with pytest.raises(PlanningCancelledError, match="annullata prima del salvataggio"):
         plan_platform_week(
             root,
             MONDAY,

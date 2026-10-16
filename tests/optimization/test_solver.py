@@ -110,7 +110,7 @@ def test_solution_validator_rejects_a_missing_required_roster_assignment(
     schedule = (ScheduledSurgery("P1", "OR-1", date(2026, 8, 10), resident_id),)
     objective = ObjectiveBreakdown(0.0, 0, unassigned, -float(unassigned))
 
-    with pytest.raises(SolutionValidationError, match=r"requires rostered resident.*under \(1d\)"):
+    with pytest.raises(SolutionValidationError, match=r"specializzando di turno.*vincolo \(1d\)"):
         _validate_solution(built, schedule, objective)
 
 

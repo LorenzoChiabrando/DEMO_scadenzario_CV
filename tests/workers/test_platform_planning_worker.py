@@ -85,7 +85,7 @@ def test_worker_forwards_persistence_overwrite_and_live_cancel_callback(
         (PlanningCancelledError("cancelled"), None, True),
         (
             RuntimeError("private detail"),
-            "Unexpected error while generating the weekly plan",
+            "Errore imprevisto durante la generazione del piano settimanale.",
             False,
         ),
     ],

@@ -7,6 +7,7 @@ import unicodedata
 from dataclasses import dataclass
 from pathlib import Path
 
+from src.error_messages import describe_os_error
 from src.patient_fields import DEFAULT_INTERVENTION_MINUTES, normalize_diagnosis
 
 
@@ -163,7 +164,9 @@ def read_patient_csv(path: str | Path) -> PatientCsvResult:
     try:
         text = _read_text(csv_path)
     except OSError as error:
-        raise PatientCsvError(f"Impossibile leggere il file: {error}") from error
+        raise PatientCsvError(
+            f"Impossibile leggere il file: {describe_os_error(error)}"
+        ) from error
 
     delimiter = _detect_delimiter(text[:8192])
     reader = csv.DictReader(io.StringIO(text, newline=""), delimiter=delimiter, strict=True)

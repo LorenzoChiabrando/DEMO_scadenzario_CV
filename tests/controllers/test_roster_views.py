@@ -4,7 +4,7 @@ from datetime import date
 from pathlib import Path
 
 import pytest
-from PySide6.QtWidgets import QApplication, QMessageBox
+from PySide6.QtWidgets import QApplication
 
 from src.controllers.controller_libretto import ControllerLibretto
 from src.controllers.controller_sale_operatorie import ControllerSaleOperatorie
@@ -12,6 +12,7 @@ from src.controllers.controller_scadenzario import ControllerScadenzario
 from src.models.data_manager import DataManager
 from src.models.data_manager_libretto import DataManagerLibretto
 from src.models.data_manager_sale_operatorie import DataManagerSaleOperatorie
+from src.views.components import messages
 from src.views.view_sale_operatorie import ViewSaleOperatorie
 from src.views.view_scadenzario import ViewScadenzario
 
@@ -32,6 +33,10 @@ def _roster(tmp_path: Path) -> tuple[ViewScadenzario, ControllerScadenzario, Dat
     controller.aggiorna_tabella()
     return view, controller, model
 
+
+
+def _text(view: ViewScadenzario, row: int, column: int) -> str:
+    return view.tabella.model().index(row, column).data()
 
 @pytest.mark.parametrize("mode", ["CORRENTE", "STORICO", "PIANIFICAZIONE"])
 def test_roster_returns_to_wide_columns_after_repeated_toggles(
@@ -95,19 +100,19 @@ def test_ward_round_updates_five_cells_and_confirmed_replacement(
 ) -> None:
     view, controller, model = _roster(tmp_path)
     row = view.row_labels.index("Giro Visite")
-    view.tabella.item(row, 8).setText("Demo A.")
-    assert [view.tabella.item(row, col).text() for col in range(6, 11)] == ["Demo A."] * 5
+    controller.assegna(row, 8, "Demo A.")
+    assert [_text(view, row, col) for col in range(6, 11)] == ["Demo A."] * 5
     assert all(view.tabella.columnSpan(row, col) == 1 for col in range(30))
-    assert view.tabella.item(row, 11).text() == "-"
-    monkeypatch.setattr(QMessageBox, "question", lambda *a: QMessageBox.StandardButton.No)
-    view.tabella.item(row, 10).setText("Demo B.")
-    assert view.tabella.item(row, 10).text() == "Demo A."
-    monkeypatch.setattr(QMessageBox, "question", lambda *a: QMessageBox.StandardButton.Yes)
-    view.tabella.item(row, 9).setText("Demo B.")
-    assert [view.tabella.item(row, col).text() for col in range(6, 11)] == ["Demo B."] * 5
+    assert _text(view, row, 11) == "-"
+    monkeypatch.setattr(messages, "ask_confirmation", lambda *a, **k: False)
+    controller.assegna(row, 10, "Demo B.")
+    assert _text(view, row, 10) == "Demo A."
+    monkeypatch.setattr(messages, "ask_confirmation", lambda *a, **k: True)
+    controller.assegna(row, 9, "Demo B.")
+    assert [_text(view, row, col) for col in range(6, 11)] == ["Demo B."] * 5
     assert model.get_giro_visite_settimana("2026-09-07", 2026, 9) == "Demo B."
-    view.tabella.item(row, 7).setText("")
-    assert all(view.tabella.item(row, col).text() == "" for col in range(6, 11))
+    controller.assegna(row, 7, "")
+    assert all(_text(view, row, col) == "" for col in range(6, 11))
     view.deleteLater()
 
 
@@ -118,13 +123,13 @@ def test_ward_round_rejects_a_conflict_on_another_day_and_reciprocal_assignment(
 ) -> None:
     view, controller, model = _roster(tmp_path)
     warnings = []
-    monkeypatch.setattr(QMessageBox, "warning", lambda *args: warnings.append(args[2]))
+    monkeypatch.setattr(messages, "show_message", lambda *args, **_k: warnings.append(args[2]))
     model.set_valore_cella("2026-09-11", "Sala Op. I", "Demo A.")
-    view.tabella.item(6, 6).setText("Demo A.")
+    controller.assegna(6, 6, "Demo A.")
     assert "11/09/2026" in warnings[0]
     assert model.get_giro_visite_settimana("2026-09-07", 2026, 9) == ""
-    view.tabella.item(6, 6).setText("Demo B.")
-    view.tabella.item(4, 8).setText("Demo B.")
+    controller.assegna(6, 6, "Demo B.")
+    controller.assegna(4, 8, "Demo B.")
     assert len(warnings) == 2
     assert model.get_valore_cella("2026-09-09", "Sala Op. I") == ""
     view.deleteLater()

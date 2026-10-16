@@ -5,7 +5,7 @@ from datetime import date, datetime, timedelta
 from pathlib import Path
 
 import pytest
-from PySide6.QtWidgets import QApplication, QDialog, QMessageBox, QWidget
+from PySide6.QtWidgets import QApplication, QDialog, QWidget
 
 from src.controllers import controller_pazienti
 from src.controllers.controller_pazienti import ControllerPazienti
@@ -17,6 +17,7 @@ from src.optimization.exceptions import PlatformDataError
 from src.optimization.platform_io import load_platform_context
 from src.optimization.platform_service import plan_platform_week
 from src.planning_schema import OPTIMIZATION_KEY
+from src.views.components import messages
 from src.views.dialog_bulk_pazienti import _COL_CPX, _COL_DUR, DialogBulkPazienti
 
 
@@ -68,7 +69,7 @@ def test_bulk_preview_storage_classification_and_solver(
     monkeypatch.setattr(
         QDialog, "exec", lambda self: self._conferma_importazione() or self.result()
     )
-    monkeypatch.setattr(QMessageBox, "information", lambda *args: None)
+    monkeypatch.setattr(messages, "show_message", lambda *args, **kwargs: None)
     controller = ControllerPazienti.__new__(ControllerPazienti)
     controller.view = QWidget()
     controller.model = manager
@@ -127,7 +128,7 @@ def test_bulk_blocks_invalid_rows_and_clears_old_preview_on_load_failure(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    monkeypatch.setattr(QMessageBox, "critical", lambda *args: None)
+    monkeypatch.setattr(messages, "show_message", lambda *args, **kwargs: None)
     path = tmp_path / "rows.csv"
     path.write_text("nome,cognome,durata\nUno,Demo,0\nDue,Demo,90\n", encoding="utf-8")
     dialog = DialogBulkPazienti()

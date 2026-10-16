@@ -44,7 +44,7 @@ def main(argv: list[str] | None = None) -> int:
             data_directory=args.data_dir,
         )
     except (OptimizationError, ValueError) as exc:
-        print(f"Planning failed: {exc}", file=sys.stderr)
+        print(f"Pianificazione non riuscita: {exc}", file=sys.stderr)
         return 2
 
     objective = asdict(run.result.objective) if run.result.objective is not None else None

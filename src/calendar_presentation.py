@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import calendar
 import re
-from collections.abc import Iterable, Mapping
+from collections.abc import Callable, Iterable, Mapping
 from datetime import date, timedelta
 
 ROW_DISPLAY_LABELS: Mapping[str, str] = {
@@ -99,3 +99,45 @@ def month_weeks(year: int, month: int) -> tuple[tuple[date, ...], ...]:
             grouped.append(week)
         current_start += timedelta(days=7)
     return tuple(grouped)
+
+
+def fit_resident_label(label: str, fits: Callable[[str], bool]) -> str:
+    """Sceglie il testo più completo che entra nella cella.
+
+    Prova nell'ordine ``Cognome N.``, il solo cognome e infine le iniziali.
+    """
+
+    tokens = label.split()
+    surname = " ".join(tokens[:-1]) if len(tokens) > 1 and tokens[-1].endswith(".") else label
+    for candidate in dict.fromkeys((label, surname)):
+        if fits(candidate):
+            return candidate
+    return person_initials(label)
+
+
+ROLE_CELL_COLORS: Mapping[str, str] = {
+    "Tipo Guardia": "#e0e7ff",
+    "Reparto I": "#e0e7ff",
+    "Reparto II": "#e0e7ff",
+    "Sala Op. I": "#dcfce7",
+    "Sala Op. II": "#dcfce7",
+    "Giro Visite": "#fef9c3",
+    "Day Hospital": "#fae8ff",
+    "Day Surgery": "#fae8ff",
+}
+"""Sfondo delle celle per ruolo, usato a schermo e nel PDF."""
+
+ROLE_HEADER_COLORS: Mapping[str, str] = {
+    "Giorno": "#e2e8f0",
+    "Tipo Guardia": "#c7d2fe",
+    "Reparto I": "#c7d2fe",
+    "Reparto II": "#c7d2fe",
+    "Sala Op. I": "#bbf7d0",
+    "Sala Op. II": "#bbf7d0",
+    "Giro Visite": "#fde68a",
+    "Day Hospital": "#e9d5ff",
+    "Day Surgery": "#e9d5ff",
+}
+"""Colore più intenso del ruolo: intestazioni di riga e celle della vista per specializzando."""
+
+GUARD_TEXT_COLORS: Mapping[str, str] = {"118": "#b91c1c", "PI": "#c2410c", "L": "#15803d"}

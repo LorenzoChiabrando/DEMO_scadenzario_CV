@@ -10,7 +10,7 @@ from PySide6.QtCore import QObject, QThread, Signal
 from PySide6.QtWidgets import QApplication
 
 from src.controllers.controller_sale_operatorie import ControllerSaleOperatorie
-from src.optimization.exceptions import PlanningCancelledError
+from src.optimization.exceptions import PlanningCancelledError, PlatformDataError
 from src.optimization.results import SolveStatus
 
 
@@ -157,6 +157,7 @@ def test_planner_runs_off_the_ui_thread_then_invalidates_cache_and_refreshes(
         assert model.cache_invalidations == 1
         assert controller._test_refreshes == [True]
         assert notices[0][0] == "Pianificazione completata"
+        assert "Stato solver: ottimo." in notices[0][1]
         assert view.btn_pianifica.text() == "PIANIFICA SETTIMANA"
         assert view.tabella.enabled is True
         assert busy_states == [True, False]
@@ -232,5 +233,26 @@ def test_shutdown_waits_for_cooperative_worker_termination(
         _wait_until(qt_app, lambda: controller._planning_worker is None)
         assert model.cache_invalidations == 0
         assert notices[0][0] == "Pianificazione annullata"
+    finally:
+        _dispose_controller(qt_app, controller)
+
+
+def test_unconvalidated_month_failure_is_shown_in_italian(qt_app: QApplication) -> None:
+    def service(*_args, **_kwargs):
+        raise PlatformDataError(
+            "Prima di pianificare bisogna convalidare lo scadenzario di: ottobre 2026."
+        )
+
+    controller, _view, _model, notices = _controller(service)
+    try:
+        controller.pianifica_settimana()
+        _wait_until(qt_app, lambda: controller._planning_worker is None)
+
+        title, message, options = notices[0]
+        assert title == "Impossibile pianificare"
+        assert message == (
+            "Prima di pianificare bisogna convalidare lo scadenzario di: ottobre 2026."
+        )
+        assert options == {"tipo": "warning"}
     finally:
         _dispose_controller(qt_app, controller)

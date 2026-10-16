@@ -35,10 +35,10 @@ def test_validation_reports_multiple_input_errors() -> None:
         build_paper_model(data)
 
     message = str(caught.value)
-    assert "duration_minutes must be positive" in message
-    assert "requires waiting_time_days and max_wait_days" in message
-    assert "unknown assigned residents" in message
-    assert "capacity_minutes must be positive" in message
+    assert "duration_minutes deve essere positivo" in message
+    assert "richiede waiting_time_days e max_wait_days" in message
+    assert "specializzandi assegnati sconosciuti" in message
+    assert "capacity_minutes deve essere positivo" in message
 
 
 def test_validation_rejects_duplicate_identifiers() -> None:
@@ -56,7 +56,7 @@ def test_validation_rejects_duplicate_identifiers() -> None:
         sessions=(Session("OR-1", date(2026, 8, 10), 120),),
     )
 
-    with pytest.raises(InputValidationError, match="duplicate patient identifiers"):
+    with pytest.raises(InputValidationError, match="Identificativi paziente duplicati"):
         build_paper_model(data)
 
 
@@ -93,12 +93,12 @@ def test_validation_converts_wrong_field_types_to_domain_errors() -> None:
         build_paper_model(data)
 
     message = str(caught.value)
-    assert "patient_id must be a string" in message
-    assert "duration_minutes must be an integer" in message
-    assert "day must be datetime.date" in message
-    assert "capacity_minutes must be an integer" in message
-    assert "changeover_minutes must be an integer" in message
-    assert "assigned resident identifiers must be strings" in message
+    assert "patient_id deve essere un testo" in message
+    assert "duration_minutes deve essere un intero" in message
+    assert "day deve essere una datetime.date" in message
+    assert "capacity_minutes deve essere un intero" in message
+    assert "changeover_minutes deve essere un intero" in message
+    assert "identificativi degli specializzandi assegnati devono essere testi" in message
 
 
 def test_validation_rejects_an_individually_impossible_required_patient() -> None:
@@ -115,7 +115,7 @@ def test_validation_rejects_an_individually_impossible_required_patient() -> Non
         sessions=(Session("OR-1", date(2026, 8, 10), 120),),
     )
 
-    with pytest.raises(InputValidationError, match="longest session has 120"):
+    with pytest.raises(InputValidationError, match="sessione più lunga ne ha 120"):
         build_paper_model(data)
 
 
@@ -142,5 +142,5 @@ def test_validation_rejects_unknown_available_resident() -> None:
         ),
     )
 
-    with pytest.raises(InputValidationError, match="unknown available residents"):
+    with pytest.raises(InputValidationError, match="specializzandi disponibili sconosciuti"):
         build_paper_model(data)

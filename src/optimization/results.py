@@ -17,6 +17,24 @@ class SolveStatus(str, Enum):
     INTERRUPTED = "interrupted"
     ERROR = "error"
 
+    @property
+    def label(self) -> str:
+        """Etichetta italiana per l'interfaccia; ``value`` resta il codice stabile."""
+
+        return _SOLVE_STATUS_LABELS[self]
+
+
+_SOLVE_STATUS_LABELS = {
+    SolveStatus.OPTIMAL: "ottimo",
+    SolveStatus.FEASIBLE: "ammissibile (ottimalità non dimostrata)",
+    SolveStatus.INFEASIBLE: "nessuna soluzione ammissibile",
+    SolveStatus.INFEASIBLE_OR_UNBOUNDED: "inammissibile o illimitato",
+    SolveStatus.UNBOUNDED: "illimitato",
+    SolveStatus.LIMIT_REACHED: "limite raggiunto senza soluzione",
+    SolveStatus.INTERRUPTED: "interrotto",
+    SolveStatus.ERROR: "errore del solver",
+}
+
 
 @dataclass(frozen=True, slots=True)
 class ScheduledSurgery:

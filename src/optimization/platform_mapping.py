@@ -40,41 +40,41 @@ class PlatformPlanningPolicy:
     def __post_init__(self) -> None:
         room_ids = tuple(self.room_ids)
         if len(room_ids) != 2 or len(set(room_ids)) != 2:
-            raise ValueError("the platform requires exactly two distinct operating rooms")
+            raise ValueError("La piattaforma richiede esattamente due sale operatorie distinte.")
         if any(not isinstance(room_id, str) or not room_id.strip() for room_id in room_ids):
-            raise ValueError("room identifiers must be non-blank strings")
+            raise ValueError("Gli identificativi delle sale devono essere testi non vuoti.")
         if not 0 <= self.session_start_minute < 24 * 60:
-            raise ValueError("session_start_minute must fall within a day")
+            raise ValueError("session_start_minute deve cadere entro le 24 ore.")
         if self.changeover_minutes < 0:
-            raise ValueError("changeover_minutes cannot be negative")
+            raise ValueError("changeover_minutes non può essere negativo.")
         if self.max_operations_per_session <= 0:
-            raise ValueError("max_operations_per_session must be positive")
+            raise ValueError("max_operations_per_session deve essere positivo.")
         if not isinstance(self.qualified_complexities_by_training_level, Mapping):
-            raise ValueError("training-level qualifications must be a mapping")
+            raise ValueError("Le abilitazioni per livello formativo devono essere un dizionario.")
         normalized_qualifications: dict[str, frozenset[str]] = {}
         for training_level, complexities in self.qualified_complexities_by_training_level.items():
             if not isinstance(training_level, str) or not training_level.strip():
-                raise ValueError("training levels must be non-blank strings")
+                raise ValueError("I livelli formativi devono essere testi non vuoti.")
             if isinstance(complexities, str):
                 raise ValueError(
-                    f"qualifications for training level {training_level!r} must be a collection"
+                    f"Le abilitazioni del livello {training_level} devono essere un elenco."
                 )
             try:
                 normalized_complexities = frozenset(complexities)
             except TypeError as error:
                 raise ValueError(
-                    f"qualifications for training level {training_level!r} must be a collection"
+                    f"Le abilitazioni del livello {training_level} devono essere un elenco."
                 ) from error
             if not normalized_complexities or any(
                 not isinstance(complexity, str) or not complexity.strip()
                 for complexity in normalized_complexities
             ):
                 raise ValueError(
-                    f"qualifications for training level {training_level!r} are invalid"
+                    f"Le abilitazioni del livello {training_level} non sono valide."
                 )
             normalized_qualifications[training_level] = normalized_complexities
         if not normalized_qualifications:
-            raise ValueError("at least one training-level qualification is required")
+            raise ValueError("Serve almeno un livello formativo con le relative abilitazioni.")
         object.__setattr__(self, "room_ids", room_ids)
         object.__setattr__(
             self,
@@ -144,62 +144,72 @@ def build_platform_context(
     """Map one platform week to ``SchedulingInput``."""
     active_policy = policy or PlatformPlanningPolicy()
     if monday.weekday() != 0:
-        raise PlatformDataError("the planning horizon must start on a Monday")
+        raise PlatformDataError("La settimana da pianificare deve iniziare di lunedì.")
 
     expected_days = tuple(monday + timedelta(days=offset) for offset in range(5))
     if set(roster_by_day) != set(expected_days):
-        raise PlatformDataError("the OR roster must contain exactly Monday through Friday")
+        raise PlatformDataError(
+            "I turni di sala devono coprire esattamente i giorni da lunedì a venerdì."
+        )
 
     for day in expected_days:
         assignments = tuple(roster_by_day[day])
         assignment_by_room = {assignment.room_id: assignment for assignment in assignments}
         if len(assignment_by_room) != len(assignments):
-            raise PlatformDataError(f"the OR roster has duplicate rooms on {day.isoformat()}")
+            raise PlatformDataError(f"I turni di sala del {day:%d/%m/%Y} ripetono la stessa sala.")
         if set(assignment_by_room) != set(active_policy.room_ids):
             raise PlatformDataError(
-                f"the OR roster must contain {list(active_policy.room_ids)} on {day.isoformat()}"
+                f"I turni di sala del {day:%d/%m/%Y} devono coprire le sale "
+                f"{', '.join(active_policy.room_ids)}."
             )
         resident_ids_for_day = [assignment.resident_id for assignment in assignments]
         if len(set(resident_ids_for_day)) != len(resident_ids_for_day):
             raise PlatformDataError(
-                f"the same resident cannot cover both operating rooms on {day.isoformat()}"
+                f"Il {day:%d/%m/%Y} lo stesso specializzando è assegnato a entrambe le sale."
             )
         if any(assignment.capacity_minutes <= 0 for assignment in assignments):
             raise PlatformDataError(
-                f"operating-room capacity must be positive on {day.isoformat()}"
+                f"La capacità delle sale del {day:%d/%m/%Y} deve essere positiva."
             )
 
-    resident_record_by_id = _index_records(resident_records, "id", "resident")
+    resident_record_by_id = _index_records(resident_records, "id", "specializzando")
     weekly_resident_ids = tuple(
         dict.fromkeys(
             assignment.resident_id for day in expected_days for assignment in roster_by_day[day]
         )
     )
     if not weekly_resident_ids:
-        raise PlatformDataError("the weekly OR roster contains no residents")
+        raise PlatformDataError(
+            "I turni di sala della settimana non hanno specializzandi assegnati."
+        )
 
     residents: list[Resident] = []
     for resident_id in weekly_resident_ids:
         record = resident_record_by_id.get(resident_id)
         if record is None:
             raise PlatformDataError(
-                f"resident {resident_id!r} is missing from the platform catalog"
+                f"Lo specializzando {resident_id} non è presente nell'anagrafica dei libretti."
             )
         if record.get("stato") != "Molinette":
-            raise PlatformDataError(f"resident {resident_id!r} is not active at Molinette")
+            raise PlatformDataError(
+                f"Lo specializzando {resident_id} non è in servizio alle Molinette."
+            )
         training_level = record.get("livello")
         if not isinstance(training_level, str) or not training_level.strip():
-            raise PlatformDataError(f"resident {resident_id!r} has no valid training level")
+            raise PlatformDataError(
+                f"Lo specializzando {resident_id} non ha un livello formativo valido."
+            )
         qualified_levels = active_policy.qualified_complexities_by_training_level.get(
             training_level
         )
         if qualified_levels is None:
             raise PlatformDataError(
-                f"resident {resident_id!r} has unsupported training level {training_level!r}"
+                f"Lo specializzando {resident_id} ha un livello formativo non gestito: "
+                f"{training_level}."
             )
         residents.append(Resident(resident_id, qualified_levels))
 
-    patient_record_by_id = _index_records(patient_records, "id", "patient")
+    patient_record_by_id = _index_records(patient_records, "id", "paziente")
     candidates: list[Patient] = []
     mapped_records: dict[str, Mapping[str, Any]] = {}
     excluded_count = 0
@@ -219,10 +229,10 @@ def build_platform_context(
         if state == "Pianificato" and patient_id not in current_draft_patient_ids:
             continue
 
-        configuration = _optimization_configuration(record, "patient", patient_id)
+        configuration = _optimization_configuration(record, "paziente", patient_id)
         category_label = configuration.get("categoria_paper")
         if category_label not in PAPER_CATEGORIES:
-            raise PlatformDataError(f"patient {patient_id!r} has an invalid paper category")
+            raise PlatformDataError(f"Il paziente {patient_id} ha una categoria non valida.")
         category = {
             "I'": PatientCategory.WAITING_LIST,
             "I''": PatientCategory.MANDATORY,
@@ -231,14 +241,19 @@ def build_platform_context(
 
         duration = record.get("durata_intervento")
         if not isinstance(duration, int) or isinstance(duration, bool) or duration <= 0:
-            raise PlatformDataError(f"patient {patient_id!r} has an invalid duration")
+            raise PlatformDataError(
+                f"Il paziente {patient_id} ha una durata dell'intervento non valida."
+            )
         complexity = record.get("complessita")
         if not isinstance(complexity, str) or not complexity.strip():
-            raise PlatformDataError(f"patient {patient_id!r} has no procedure complexity")
+            raise PlatformDataError(
+                f"Il paziente {patient_id} non ha la complessità dell'intervento: "
+                "completare il campo Complessità nella scheda paziente."
+            )
         if complexity not in supported_complexities:
             raise PlatformDataError(
-                f"patient {patient_id!r} requires a supported procedure complexity; "
-                "completare il campo Complessità nella scheda paziente"
+                f"Il paziente {patient_id} ha una complessità non gestita: "
+                "completare il campo Complessità nella scheda paziente."
             )
         inserted = _parse_platform_date(record.get("data_inserimento"), patient_id)
         waiting_time_days = None
@@ -251,8 +266,8 @@ def build_platform_context(
                 or max_wait_days <= 0
             ):
                 raise PlatformDataError(
-                    f"patient {patient_id!r} has an invalid maximum waiting time; "
-                    "completare Urgenza o attesa_massima_giorni nella scheda paziente"
+                    f"Il paziente {patient_id} non ha un'attesa massima valida: "
+                    "completare Urgenza o attesa_massima_giorni nella scheda paziente."
                 )
             waiting_time_days = (monday - inserted).days
 
@@ -270,7 +285,9 @@ def build_platform_context(
         mapped_records[patient_id] = record
 
     if not candidates:
-        raise PlatformDataError("no waiting-list patients are available for this week")
+        raise PlatformDataError(
+            "Non ci sono pazienti in lista d'attesa pianificabili per questa settimana."
+        )
 
     sessions = tuple(
         Session(
@@ -308,7 +325,9 @@ def map_result_to_platform_plan(
     """Convert a feasible result to ordered platform records."""
     active_policy = policy or PlatformPlanningPolicy()
     if not result.has_solution or result.objective is None:
-        raise PlatformDataError("only a validated feasible solver result can be persisted")
+        raise PlatformDataError(
+            "Si può salvare solo una soluzione del solver ammissibile e verificata."
+        )
 
     patient_by_id = {patient.patient_id: patient for patient in context.scheduling_input.patients}
     expected_days = tuple(context.monday + timedelta(days=offset) for offset in range(5))
@@ -321,16 +340,20 @@ def map_result_to_platform_plan(
     seen_patient_ids: set[str] = set()
     for record in result.schedule:
         if record.patient_id in seen_patient_ids:
-            raise PlatformDataError(f"patient {record.patient_id!r} appears more than once")
+            raise PlatformDataError(f"Il paziente {record.patient_id} compare più di una volta.")
         if record.patient_id not in patient_by_id:
-            raise PlatformDataError(f"solver returned unknown patient {record.patient_id!r}")
+            raise PlatformDataError(
+                f"Il solver ha restituito un paziente sconosciuto: {record.patient_id}."
+            )
         session_key = (record.day, record.room_id)
         if session_key not in records_by_session:
-            raise PlatformDataError("solver returned a session outside the target platform week")
+            raise PlatformDataError(
+                "Il solver ha restituito una sessione fuori dalla settimana da pianificare."
+            )
         earliest = patient_by_id[record.patient_id].earliest_surgery_date
         if earliest is not None and record.day < earliest:
             raise PlatformDataError(
-                f"patient {record.patient_id!r} is scheduled before the insertion date"
+                f"Il paziente {record.patient_id} è pianificato prima della data di inserimento."
             )
         seen_patient_ids.add(record.patient_id)
         records_by_session[session_key].append(record)
@@ -349,7 +372,7 @@ def map_result_to_platform_plan(
             )
             if len(sorted_records) > active_policy.max_operations_per_session:
                 raise PlatformDataError(
-                    f"session {(room_id, day.isoformat())!r} exceeds the operation-row limit"
+                    f"La sala {room_id} del {day:%d/%m/%Y} supera il numero massimo di interventi."
                 )
 
             current_minute = active_policy.session_start_minute
@@ -360,8 +383,8 @@ def map_result_to_platform_plan(
                 if scheduled.resident_id is not None:
                     if scheduled.resident_id != assignment_for_room.resident_id:
                         raise PlatformDataError(
-                            f"resident {scheduled.resident_id!r} is outside room {room_id!r} "
-                            f"on {day.isoformat()}"
+                            f"Lo specializzando {scheduled.resident_id} non è assegnato alla sala "
+                            f"{room_id} il {day:%d/%m/%Y}."
                         )
                     assignment = assignment_for_room
 
@@ -383,8 +406,7 @@ def map_result_to_platform_plan(
             session_end = active_policy.session_start_minute + session.capacity_minutes
             if current_minute > session_end:
                 raise PlatformDataError(
-                    f"mapped operations exceed capacity in room {room_id!r} "
-                    f"on {day.isoformat()}"
+                    f"Gli interventi della sala {room_id} del {day:%d/%m/%Y} superano la capacità."
                 )
 
         operations.sort(
@@ -458,9 +480,9 @@ def _index_records(
     for record in records:
         identifier = record.get(key)
         if not isinstance(identifier, str) or not identifier.strip():
-            raise PlatformDataError(f"{label} record has no stable identifier")
+            raise PlatformDataError(f"Una scheda {label} non ha un identificativo.")
         if identifier in indexed:
-            raise PlatformDataError(f"duplicate {label} identifier {identifier!r}")
+            raise PlatformDataError(f"Identificativo {label} duplicato: {identifier}.")
         indexed[identifier] = record
     return indexed
 
@@ -473,11 +495,12 @@ def _optimization_configuration(
     configuration = record.get(OPTIMIZATION_KEY)
     if not isinstance(configuration, Mapping):
         raise PlatformDataError(
-            f"{label} {identifier!r} has no {OPTIMIZATION_KEY} configuration"
+            f"La scheda {label} {identifier} non contiene la configurazione {OPTIMIZATION_KEY}."
         )
     if configuration.get("versione_schema") != SCHEMA_VERSION:
         raise PlatformDataError(
-            f"{label} {identifier!r} has an unsupported optimization schema version"
+            f"La scheda {label} {identifier} usa una versione della configurazione di "
+            "ottimizzazione non supportata."
         )
     return configuration
 
@@ -486,7 +509,9 @@ def _parse_platform_date(value: object, patient_id: str) -> date:
     try:
         return parse_patient_insertion_date(value)
     except ValueError as exc:
-        raise PlatformDataError(f"patient {patient_id!r} has an invalid insertion date") from exc
+        raise PlatformDataError(
+            f"Il paziente {patient_id} ha una data di inserimento non valida."
+        ) from exc
 
 
 def _minute_to_time(value: int) -> str:

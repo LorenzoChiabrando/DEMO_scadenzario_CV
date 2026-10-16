@@ -11,9 +11,9 @@ def next_available_id(directory: str | Path, prefix: str, width: int) -> str:
     prevent overwrites if two writers run concurrently.
     """
     if not prefix:
-        raise ValueError("prefix must not be empty")
+        raise ValueError("Il prefisso dell'identificativo non può essere vuoto.")
     if width < 1:
-        raise ValueError("width must be at least 1")
+        raise ValueError("La lunghezza dell'identificativo deve essere almeno 1.")
 
     root = Path(directory)
     highest_suffix = 0

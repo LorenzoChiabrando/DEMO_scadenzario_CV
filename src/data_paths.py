@@ -23,6 +23,6 @@ def resolve_data_directory(
     if configured is None:
         return (root / "mock_data").resolve()
     if not str(configured).strip():
-        raise ValueError("The data directory must not be empty")
+        raise ValueError("La cartella dei dati non può essere vuota.")
     path = Path(configured).expanduser()
     return (path if path.is_absolute() else root / path).resolve()

@@ -1,15 +1,14 @@
 import copy
 import datetime
 import logging
-import os as _os
 from pathlib import Path
 from threading import Event
 
 from PySide6.QtCore import QObject, Signal, QSize, Qt, Slot
 from PySide6.QtWidgets import (
-    QTableWidget, QDialog, QVBoxLayout, QHBoxLayout,
-    QLabel, QFrame, QPushButton, QListWidget, QListWidgetItem, QComboBox,
-    QFileDialog, QInputDialog, QMessageBox,
+    QTableWidget, QVBoxLayout, QHBoxLayout,
+    QLabel, QFrame, QListWidget, QListWidgetItem, QComboBox,
+    QFileDialog,
 )
 
 from src.calendar_presentation import (
@@ -22,8 +21,11 @@ from src.calendar_presentation import (
 from src.exports.calendar_pdf import CalendarPdfDocument, CalendarPdfRow, write_calendar_pdf
 from src.optimization.platform_service import plan_platform_week
 from src.patient_fields import parse_patient_insertion_date
-from src.data_paths import PROJECT_ROOT, resolve_data_directory
+from src.data_paths import resolve_data_directory
+from src.error_messages import describe_error
 from src.planning_schema import OPTIMIZATION_KEY
+from src.views.components import messages
+from src.views.components.modal_dialog import ModalDialog
 from src.workers.platform_planning_worker import (
     PlanningService,
     PlatformPlanningWorker,
@@ -39,6 +41,7 @@ MESI_ITA_COMPLETI = [
 GIORNI_ITA = ["LUN", "MAR", "MER", "GIO", "VEN"]
 CHANGEOVER_MINUTES = 11
 ROOM_IDS = ("OR-1", "OR-2")
+_SEZIONE = "sale_operatorie"
 MAX_OPERATIONS_PER_ROOM = 12
 
 CHIRURGHI_MOCK = [
@@ -57,7 +60,7 @@ def build_sale_operatorie_pdf_document(
     """Prepara i dati delle sale operatorie per il PDF."""
 
     if not dates:
-        raise ValueError("at least one date is required")
+        raise ValueError("Serve almeno una data da esportare.")
     compact = len(dates) > 7
     weekdays = ("Lun", "Mar", "Mer", "Gio", "Ven", "Sab", "Dom")
     columns = tuple(
@@ -388,15 +391,14 @@ class ControllerSaleOperatorie(QObject):
             f"Settimana {index}: {week[0].strftime('%d/%m')} - {week[-1].strftime('%d/%m')}"
             for index, week in enumerate(weeks, 1)
         ]
-        choice, accepted = QInputDialog.getItem(
+        choice = messages.choose_option(
             self.view,
             "Esporta sale operatorie",
             "Intervallo da esportare:",
             choices,
-            0,
-            False,
+            section=_SEZIONE,
         )
-        if not accepted:
+        if choice is None:
             return
         if choice == choices[0]:
             dates = month_dates(anchor.year, anchor.month)
@@ -428,105 +430,37 @@ class ControllerSaleOperatorie(QObject):
             )
             output_path = write_calendar_pdf(path, document)
         except (OSError, ValueError, RuntimeError) as error:
-            QMessageBox.critical(
+            messages.show_message(
                 self.view,
                 "Esportazione non riuscita",
-                f"Impossibile creare il PDF:\n{error}",
+                f"Impossibile creare il PDF:\n{describe_error(error)}",
+                section=_SEZIONE,
+                kind="error",
             )
             return
-        QMessageBox.information(
+        messages.show_message(
             self.view,
             "PDF creato",
             f"Calendario esportato in:\n{output_path}",
+            section=_SEZIONE,
         )
 
-    def _load_style(self):
-        path = _os.path.join(PROJECT_ROOT, "asset", "styles", "pazienti.qss")
-        return open(path, encoding="utf-8").read() if _os.path.exists(path) else ""
-
     def _avviso(self, titolo: str, messaggio: str, tipo: str = "info", parent=None):
-        """Dialog informativo/warning coerente con lo stile app."""
-        accent = "#d97706" if tipo == "warning" else "#0369a1"
-        dlg = QDialog(parent or self.view)
-        dlg.setWindowTitle(titolo)
-        dlg.setModal(True)
-        dlg.setMinimumWidth(420)
-        dlg.setAttribute(Qt.WidgetAttribute.WA_DeleteOnClose)
-        dlg.setStyleSheet(self._load_style() + "\nQDialog { background-color: #ffffff; }")
-
-        root = QVBoxLayout(dlg)
-        root.setContentsMargins(0, 0, 0, 0)
-        root.setSpacing(0)
-        bar = QFrame()
-        bar.setFixedHeight(5)
-        bar.setStyleSheet(f"background-color:{accent}; border:none;")
-        root.addWidget(bar)
-        inner = QVBoxLayout()
-        inner.setContentsMargins(30, 22, 30, 22)
-        inner.setSpacing(10)
-        root.addLayout(inner)
-        lbl_t = QLabel(titolo)
-        lbl_t.setObjectName("TitoloDialog")
-        lbl_t.setStyleSheet(f"color:{accent};")
-        inner.addWidget(lbl_t)
-        lbl_m = QLabel(messaggio)
-        lbl_m.setWordWrap(True)
-        lbl_m.setStyleSheet("color:#334155; font-size:14px;")
-        inner.addWidget(lbl_m)
-        inner.addSpacing(6)
-        btn = QPushButton("OK")
-        btn.setObjectName("BtnSalvaDialog")
-        btn.setFixedHeight(44)
-        btn.setCursor(Qt.CursorShape.PointingHandCursor)
-        btn.clicked.connect(dlg.accept)
-        inner.addWidget(btn)
-        dlg.exec()
+        """Messaggio della sezione; ``tipo="warning"`` usa il tono di avviso."""
+        messages.show_message(
+            parent or self.view,
+            titolo,
+            messaggio,
+            section=_SEZIONE,
+            kind="warning" if tipo == "warning" else "info",
+        )
 
     def _conferma(self, titolo: str, messaggio: str,
                   testo_si: str = "Conferma", parent=None) -> bool:
-        """Dialog Yes/No coerente con lo stile app. Ritorna True se confermato."""
-        dlg = QDialog(parent or self.view)
-        dlg.setWindowTitle(titolo)
-        dlg.setModal(True)
-        dlg.setMinimumWidth(420)
-        dlg.setAttribute(Qt.WidgetAttribute.WA_DeleteOnClose)
-        dlg.setStyleSheet(self._load_style() + "\nQDialog { background-color: #ffffff; }")
-
-        root = QVBoxLayout(dlg)
-        root.setContentsMargins(0, 0, 0, 0)
-        root.setSpacing(0)
-        bar = QFrame()
-        bar.setFixedHeight(5)
-        bar.setStyleSheet("background-color:#0369a1; border:none;")
-        root.addWidget(bar)
-        inner = QVBoxLayout()
-        inner.setContentsMargins(30, 22, 30, 22)
-        inner.setSpacing(10)
-        root.addLayout(inner)
-        lbl_t = QLabel(titolo)
-        lbl_t.setObjectName("TitoloDialog")
-        inner.addWidget(lbl_t)
-        lbl_m = QLabel(messaggio)
-        lbl_m.setWordWrap(True)
-        lbl_m.setStyleSheet("color:#334155; font-size:14px;")
-        inner.addWidget(lbl_m)
-        inner.addSpacing(6)
-        btn_row = QHBoxLayout()
-        btn_row.setSpacing(12)
-        btn_no = QPushButton("Annulla")
-        btn_no.setObjectName("BtnAnnullaDialog")
-        btn_no.setFixedHeight(44)
-        btn_no.setCursor(Qt.CursorShape.PointingHandCursor)
-        btn_no.clicked.connect(dlg.reject)
-        btn_si = QPushButton(testo_si)
-        btn_si.setObjectName("BtnSalvaDialog")
-        btn_si.setFixedHeight(44)
-        btn_si.setCursor(Qt.CursorShape.PointingHandCursor)
-        btn_si.clicked.connect(dlg.accept)
-        btn_row.addWidget(btn_no)
-        btn_row.addWidget(btn_si)
-        inner.addLayout(btn_row)
-        return dlg.exec() == QDialog.DialogCode.Accepted
+        """Dialog Annulla/Conferma. Ritorna True se confermato."""
+        return messages.ask_confirmation(
+            parent or self.view, titolo, messaggio, section=_SEZIONE, confirm_text=testo_si
+        )
 
     def _gestisci_navigazione(self, stato: str):
         self.view.btn_prev.setVisible(True)
@@ -774,7 +708,7 @@ class ControllerSaleOperatorie(QObject):
                     "Pianificazione completata",
                     f"Piano settimanale salvato correttamente.\n"
                     f"Interventi pianificati: {len(result.result.schedule)}.\n"
-                    f"Stato solver: {result.result.status.value}."
+                    f"Stato solver: {result.result.status.label}."
                     f"{objective_text}",
                 )
             elif was_cancelled:
@@ -1178,37 +1112,23 @@ class ControllerSaleOperatorie(QObject):
             )
             return
 
-        dialog = QDialog(self.view)
         giorno_nome = GIORNI_ITA[data_col.weekday()]
         mese_nome   = MESI_ITA[data_col.month - 1]
+        dialog = ModalDialog(
+            "Inserimento manuale",
+            f"Seleziona un paziente da aggiungere — "
+            f"{giorno_nome} {data_col.day} {mese_nome} {data_col.year}",
+            section=_SEZIONE,
+            extra_styles=("pazienti.qss",),
+            parent=self.view,
+        )
         dialog.setWindowTitle(f"Inserimento manuale — {giorno_nome} {data_col.day} {mese_nome}")
-        dialog.setModal(True)
         dialog.setMinimumWidth(560)
         dialog.setMinimumHeight(540)
         dialog.setSizeGripEnabled(True)
         dialog.setAttribute(Qt.WidgetAttribute.WA_DeleteOnClose)
 
-        dialog.setStyleSheet(self._load_style() + "\nQDialog { background-color: #f8fafc; }")
-
-        root = QVBoxLayout(dialog)
-        root.setContentsMargins(28, 24, 28, 24)
-        root.setSpacing(12)
-
-        lbl_titolo = QLabel("Inserimento manuale")
-        lbl_titolo.setObjectName("TitoloDialog")
-        root.addWidget(lbl_titolo)
-
-        lbl_sub = QLabel(
-            f"Seleziona un paziente da aggiungere — "
-            f"{giorno_nome} {data_col.day} {mese_nome} {data_col.year}"
-        )
-        lbl_sub.setObjectName("SottoTitoloDialog")
-        root.addWidget(lbl_sub)
-
-        sep = QFrame()
-        sep.setObjectName("SeparatoreDialog")
-        sep.setFixedHeight(1)
-        root.addWidget(sep)
+        root = dialog.body
 
         lbl_room = QLabel("SALA OPERATORIA")
         lbl_room.setObjectName("LblCampo")
@@ -1285,26 +1205,11 @@ class ControllerSaleOperatorie(QObject):
         lbl_timing.setFixedHeight(38)
         root.addWidget(lbl_timing)
 
-        sep2 = QFrame()
-        sep2.setObjectName("SeparatoreDialog")
-        sep2.setFixedHeight(1)
-        root.addWidget(sep2)
-
-        btn_row = QHBoxLayout()
-        btn_row.setSpacing(12)
-        btn_annulla = QPushButton("Annulla")
-        btn_annulla.setObjectName("BtnAnnullaDialog")
-        btn_annulla.setFixedHeight(44)
-        btn_annulla.setCursor(Qt.CursorShape.PointingHandCursor)
+        btn_annulla = dialog.make_button("Annulla", "secondary")
         btn_annulla.clicked.connect(dialog.reject)
-        btn_inserisci = QPushButton("Inserisci")
-        btn_inserisci.setObjectName("BtnSalvaDialog")
-        btn_inserisci.setFixedHeight(44)
-        btn_inserisci.setCursor(Qt.CursorShape.PointingHandCursor)
+        btn_inserisci = dialog.make_button("Inserisci", "primary")
         btn_inserisci.setEnabled(False)
-        btn_row.addWidget(btn_annulla)
-        btn_row.addWidget(btn_inserisci)
-        root.addLayout(btn_row)
+        dialog.add_footer(btn_annulla, btn_inserisci)
 
         paz_sel = [None]
 
@@ -1512,32 +1417,19 @@ class ControllerSaleOperatorie(QObject):
 
     def _mostra_popup_paziente(self, slot: dict, paz_full: dict | None,
                                data_str: str = None, op_idx: int = None):
-        dialog = QDialog(self.view)
+        dialog = ModalDialog(
+            slot.get("nome_paziente", "—"),
+            "Scheda paziente",
+            section=_SEZIONE,
+            parent=self.view,
+        )
         dialog.setWindowTitle("Dettagli Paziente")
-        dialog.setModal(True)
-        dialog.setMinimumWidth(500)
+        dialog.setMinimumWidth(520)
         dialog.setSizeGripEnabled(False)
         dialog.setAttribute(Qt.WidgetAttribute.WA_DeleteOnClose)
-        dialog.setStyleSheet(self._load_style() + "\nQDialog { background-color: #f8fafc; }")
 
-        root = QVBoxLayout(dialog)
-        root.setContentsMargins(30, 30, 30, 30)
-        root.setSpacing(16)
-
-        lbl_titolo = QLabel(slot.get("nome_paziente", "—"))
-        lbl_titolo.setObjectName("TitoloDialog")
-        lbl_titolo.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        root.addWidget(lbl_titolo)
-
-        lbl_sub = QLabel("Scheda paziente")
-        lbl_sub.setObjectName("SottoTitoloDialog")
-        lbl_sub.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        root.addWidget(lbl_sub)
-
-        sep = QFrame()
-        sep.setObjectName("SeparatoreDialog")
-        sep.setFixedHeight(1)
-        root.addWidget(sep)
+        root = dialog.body
+        root.setSpacing(14)
 
         def _riga(etichetta: str, valore: str):
             row = QHBoxLayout()
@@ -1636,33 +1528,18 @@ class ControllerSaleOperatorie(QObject):
             if note:
                 _riga("Note cliniche", note)
 
-        sep_btn = QFrame()
-        sep_btn.setObjectName("SeparatoreDialog")
-        sep_btn.setFixedHeight(1)
-        root.addWidget(sep_btn)
-
-        btn_row = QHBoxLayout()
-        btn_row.setSpacing(12)
-
+        btn_rimuovi = None
         if (self.modalita_corrente in ("PIANIFICAZIONE", "CONSULTAZIONE")
                 and self._stato_corrente != "CONVALIDATO"
                 and data_str is not None and op_idx is not None):
-            btn_rimuovi = QPushButton("Rimuovi dal piano")
-            btn_rimuovi.setObjectName("BtnElimina")
-            btn_rimuovi.setFixedHeight(44)
-            btn_rimuovi.setCursor(Qt.CursorShape.PointingHandCursor)
+            btn_rimuovi = dialog.make_button("Rimuovi dal piano", "danger")
             btn_rimuovi.clicked.connect(
                 lambda: self._rimuovi_paziente_da_slot(dialog, data_str, op_idx)
             )
-            btn_row.addWidget(btn_rimuovi)
 
-        btn_chiudi = QPushButton("Chiudi")
-        btn_chiudi.setObjectName("BtnAnnullaDialog")
-        btn_chiudi.setFixedHeight(44)
-        btn_chiudi.setCursor(Qt.CursorShape.PointingHandCursor)
+        btn_chiudi = dialog.make_button("Chiudi", "secondary")
+        btn_chiudi.setDefault(True)
         btn_chiudi.clicked.connect(dialog.accept)
-        btn_row.addWidget(btn_chiudi)
-
-        root.addLayout(btn_row)
+        dialog.add_footer(btn_chiudi, leading=btn_rimuovi)
 
         dialog.exec()

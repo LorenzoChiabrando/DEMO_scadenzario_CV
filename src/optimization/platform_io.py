@@ -56,7 +56,7 @@ def load_platform_context(
     root = resolve_data_directory(data_directory, project_root=project_root)
     active_policy = policy or PlatformPlanningPolicy()
     if monday.weekday() != 0:
-        raise PlatformDataError("the planning horizon must start on a Monday")
+        raise PlatformDataError("La settimana da pianificare deve iniziare di lunedì.")
     expected_days = tuple(monday + timedelta(days=offset) for offset in range(5))
     scadenzario_by_month = _load_convalidated_scadenzario_months(root, expected_days)
     patient_records = _read_catalog(root / "pazienti")
@@ -79,12 +79,14 @@ def load_platform_context(
             display_name = daily_data.get(roster_field)
             if not isinstance(display_name, str) or not display_name.strip():
                 raise PlatformDataError(
-                    f"the OR roster is incomplete for {day.isoformat()} ({roster_field})"
+                    f"Lo scadenzario del {day:%d/%m/%Y} non ha lo specializzando "
+                    f"di {roster_field}."
                 )
             resident_id = resident_by_display_name.get(_normalize_display_name(display_name))
             if resident_id is None:
                 raise PlatformDataError(
-                    f"an OR roster entry cannot be resolved on {day.isoformat()}"
+                    f"Uno specializzando di sala del {day:%d/%m/%Y} non è presente "
+                    "nell'anagrafica dei libretti."
                 )
             assignments.append(
                 RosterAssignment(
@@ -138,7 +140,9 @@ def persist_platform_week_plan(
     expected_days = tuple(plan.monday + timedelta(days=offset) for offset in range(5))
     plan_by_day = {day_plan.day: day_plan for day_plan in plan.days}
     if set(plan_by_day) != set(expected_days):
-        raise PlatformPersistenceError("the plan must contain exactly Monday through Friday")
+        raise PlatformPersistenceError(
+            "Il piano deve coprire esattamente i giorni da lunedì a venerdì."
+        )
 
     affected_months = tuple(sorted({(day.year, day.month) for day in expected_days}))
     paths = tuple(
@@ -155,14 +159,15 @@ def persist_platform_week_plan(
                 month_data[year, month] = {"metadata": {"stato": "BOZZA"}, "turni": {}}
 
         convalidated_target_months = [
-            f"{year:04d}-{month:02d}"
+            _month_label(year, month)
             for (year, month), data in month_data.items()
             if data.get("metadata", {}).get("stato", "BOZZA") == "CONVALIDATO"
         ]
         if convalidated_target_months:
             raise PlatformPersistenceError(
-                "the target operating-room months are convalidated: "
+                "Le sale operatorie di questi mesi sono già convalidate: "
                 + ", ".join(convalidated_target_months)
+                + "."
             )
 
         canonical = month_data[plan.monday.year, plan.monday.month]
@@ -170,7 +175,9 @@ def persist_platform_week_plan(
         week_states = metadata.setdefault("settimane", {})
         week_key = plan.monday.isoformat()
         if week_states.get(week_key, "BOZZA") == "CONVALIDATO":
-            raise PlatformPersistenceError("the target week is convalidated")
+            raise PlatformPersistenceError(
+                "La settimana è già convalidata e non può essere ripianificata."
+            )
 
         has_existing_operations = any(
             month_data[day.year, day.month]
@@ -181,7 +188,8 @@ def persist_platform_week_plan(
         )
         if has_existing_operations and not overwrite:
             raise PlatformPersistenceError(
-                "the target draft already contains operations; explicit overwrite is required"
+                "La settimana contiene già degli interventi: conferma la sovrascrittura "
+                "per rigenerare il piano."
             )
 
         updated = deepcopy(month_data)
@@ -209,7 +217,9 @@ def persist_platform_week_plan(
                 root / "pazienti", sale_directory, updates,
             )
         except (OSError, TypeError, ValueError) as exc:
-            raise PlatformPersistenceError("cannot prepare patient planning states") from exc
+            raise PlatformPersistenceError(
+                "Impossibile aggiornare lo stato dei pazienti pianificati."
+            ) from exc
         originals.update({path: path.read_bytes() for path in patient_updates})
         updates.update(patient_updates)
         backup_paths = _write_private_backups(originals, backup_root)
@@ -227,7 +237,8 @@ def persist_platform_week_plan(
         except Exception as exc:
             _restore_originals(originals)
             raise PlatformPersistenceError(
-                "the weekly plan commit failed and was rolled back"
+                "Il salvataggio del piano settimanale non è riuscito: i dati precedenti "
+                "sono stati ripristinati."
             ) from exc
         finally:
             for temporary in temporary_paths.values():
@@ -238,7 +249,7 @@ def persist_platform_week_plan(
 
 def _read_catalog(directory: Path) -> tuple[JsonObject, ...]:
     if not directory.is_dir():
-        raise PlatformDataError(f"required platform directory is missing: {directory}")
+        raise PlatformDataError(f"Manca la cartella dei dati richiesta: {directory}")
     return tuple(_read_json(path) for path in sorted(directory.glob("*.json")))
 
 
@@ -250,31 +261,34 @@ def _room_configuration_for_day(
     configuration = month_data.get(OPTIMIZATION_KEY)
     if not isinstance(configuration, dict):
         raise PlatformDataError(
-            f"the scadenzario has no {OPTIMIZATION_KEY} configuration for {day:%Y-%m}"
+            f"Lo scadenzario di {_month_label(day.year, day.month)} non contiene la "
+            f"configurazione {OPTIMIZATION_KEY}."
         )
     if configuration.get("versione_schema") != SCHEMA_VERSION:
         raise PlatformDataError(
-            f"the scadenzario has an unsupported optimization schema for {day:%Y-%m}"
+            f"Lo scadenzario di {_month_label(day.year, day.month)} usa una versione "
+            "della configurazione di ottimizzazione non supportata."
         )
 
     rooms = configuration.get("sale_operatorie")
     if not isinstance(rooms, dict) or set(rooms) != set(expected_room_ids):
         raise PlatformDataError(
-            f"the scadenzario must define exactly {list(expected_room_ids)} for {day:%Y-%m}"
+            f"Lo scadenzario di {_month_label(day.year, day.month)} deve definire "
+            f"esattamente le sale {', '.join(expected_room_ids)}."
         )
 
     capacity_overrides = configuration.get("capacita_sessioni", {})
     if not isinstance(capacity_overrides, dict):
-        raise PlatformDataError("capacita_sessioni must be a JSON object")
+        raise PlatformDataError("La configurazione capacita_sessioni deve essere un oggetto JSON.")
     daily_overrides = capacity_overrides.get(day.isoformat(), {})
     if not isinstance(daily_overrides, dict):
         raise PlatformDataError(
-            f"session capacity overrides must be a JSON object for {day.isoformat()}"
+            f"Le capacità delle sale del {day:%d/%m/%Y} devono essere un oggetto JSON."
         )
     unknown_override_rooms = set(daily_overrides) - set(expected_room_ids)
     if unknown_override_rooms:
         raise PlatformDataError(
-            f"session capacity overrides reference unknown rooms on {day.isoformat()}"
+            f"Le capacità delle sale del {day:%d/%m/%Y} citano sale inesistenti."
         )
 
     resolved: dict[str, JsonObject] = {}
@@ -283,24 +297,28 @@ def _room_configuration_for_day(
     for room_id in expected_room_ids:
         room = rooms[room_id]
         if not isinstance(room, dict):
-            raise PlatformDataError(f"room {room_id!r} configuration must be a JSON object")
+            raise PlatformDataError(
+                f"La configurazione della sala {room_id} deve essere un oggetto JSON."
+            )
         roster_field = room.get("riga_turno")
         role = room.get("ruolo_specializzando")
         capacity = daily_overrides.get(room_id, room.get("capacita_minuti"))
         if not isinstance(roster_field, str) or not roster_field.strip():
-            raise PlatformDataError(f"room {room_id!r} has no roster field")
+            raise PlatformDataError(f"La sala {room_id} non indica la riga dello scadenzario.")
         if not isinstance(role, str) or not role.strip():
-            raise PlatformDataError(f"room {room_id!r} has no specialist role")
+            raise PlatformDataError(f"La sala {room_id} non indica il ruolo dello specializzando.")
         if (
             not isinstance(capacity, int)
             or isinstance(capacity, bool)
             or capacity <= 0
         ):
             raise PlatformDataError(
-                f"room {room_id!r} has invalid capacity on {day.isoformat()}"
+                f"La sala {room_id} ha una capacità non valida il {day:%d/%m/%Y}."
             )
         if roster_field in roster_fields or role in roles:
-            raise PlatformDataError("operating rooms must use distinct roster fields and roles")
+            raise PlatformDataError(
+                "Le sale operatorie devono usare righe dello scadenzario e ruoli distinti."
+            )
         roster_fields.add(roster_field)
         roles.add(role)
         resolved[room_id] = {
@@ -325,22 +343,35 @@ def _load_convalidated_scadenzario_months(
         metadata = data.get("metadata")
         state = metadata.get("stato") if isinstance(metadata, dict) else None
         if state != "CONVALIDATO":
-            unconvalidated.append(f"{year:04d}-{month:02d}")
+            unconvalidated.append(_month_label(year, month))
     if unconvalidated:
         raise PlatformDataError(
-            "the scadenzario months must be convalidated before planning: "
+            "Prima di pianificare bisogna convalidare lo scadenzario di: "
             + ", ".join(unconvalidated)
+            + "."
         )
     return snapshots
+
+
+_ITALIAN_MONTHS = (
+    "gennaio", "febbraio", "marzo", "aprile", "maggio", "giugno",
+    "luglio", "agosto", "settembre", "ottobre", "novembre", "dicembre",
+)  # fmt: skip
+
+
+def _month_label(year: int, month: int) -> str:
+    """Mese in forma leggibile per i messaggi, es. ``ottobre 2026``."""
+
+    return f"{_ITALIAN_MONTHS[month - 1]} {year}"
 
 
 def _read_json(path: Path) -> JsonObject:
     try:
         parsed = json.loads(path.read_text(encoding="utf-8"))
     except (OSError, json.JSONDecodeError) as exc:
-        raise PlatformDataError(f"cannot read valid platform JSON from {path}") from exc
+        raise PlatformDataError(f"Impossibile leggere un file JSON valido: {path}") from exc
     if not isinstance(parsed, dict):
-        raise PlatformDataError(f"platform JSON root must be an object: {path}")
+        raise PlatformDataError(f"Il file JSON deve contenere un oggetto: {path}")
     return parsed
 
 
@@ -356,13 +387,17 @@ def _build_resident_name_index(
         if not all(
             isinstance(value, str) and value.strip() for value in (resident_id, name, surname)
         ):
-            raise PlatformDataError("a resident catalog record has incomplete identity fields")
+            raise PlatformDataError(
+                "Un libretto specializzando non ha nome, cognome o identificativo."
+            )
         display_key = _normalize_display_name(f"{surname} {name[0]}.")
         if display_key in index:
             ambiguous.add(display_key)
         index[display_key] = resident_id
     if ambiguous:
-        raise PlatformDataError("resident display names are not unique")
+        raise PlatformDataError(
+            "Due specializzandi hanno la stessa sigla (Cognome N.): rendile distinguibili."
+        )
     return index
 
 

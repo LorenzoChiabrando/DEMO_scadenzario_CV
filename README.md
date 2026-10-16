@@ -102,9 +102,22 @@ Works on all platforms. The `venv/` folder can be deleted and recreated at any t
 Lo Scadenziario mantiene nei JSON le chiavi legacy `Reparto I` e `Reparto II`, ma le mostra
 come **I Reperibilità** e **II Reperibilità**. I pulsanti **Dettaglio** e **Intero mese**
 permettono rispettivamente di scorrere celle ampie o di adattare tutti i giorni alla finestra.
-Nella vista mensile gli specializzandi sono mostrati tramite iniziali; un click sulla cella
-visualizza il nome completo. Le Sale operatorie offrono lo stesso riepilogo mensile in sola
-lettura, mentre gli spostamenti e la pianificazione restano disponibili nella vista settimanale.
+Lo Scadenziario offre due viste dello stesso mese: **Per attività** (una riga per ruolo, con
+Dettaglio e Intero mese; un click sulla cella apre l'assegnazione) e **Per specializzando** (una
+riga per persona, con il totale dei turni nella prima colonna e la sigla del ruolo di ogni
+giorno — R1, R2, S1, S2, GV, DH, DS; sola consultazione). In entrambe Dettaglio mostra colonne
+larghe e scorrevoli, Intero mese tutto il mese in una schermata. Entrambe leggono lo stesso dato (`RosterMonth`), che
+alimenta anche l'export PDF. La legenda dei tipi di guardia (118, PI, L) è nella riga degli
+strumenti: il tooltip di ogni codice ne riporta la descrizione. Le Sale operatorie offrono un
+riepilogo mensile in sola lettura, mentre gli spostamenti e la pianificazione restano disponibili
+nella vista settimanale.
+
+Le assegnazioni dello Scadenziario si modificano da un dialog modale, aperto con un click su
+una cella modificabile (giorno feriale, mese non convalidato, modalità Corrente o
+Pianificazione). Il dialog degli specializzandi permette la ricerca per nome e mostra in grigio,
+con il motivo, chi ha già un altro incarico nella giornata o nella settimana del giro visite;
+la riga Tipo Guardia propone 118, PI e L con i colori della legenda. Entrambi permettono di
+rimuovere l'assegnazione corrente.
 
 Il giro visite ha una cella per ciascun giorno lavorativo. Le cinque celle condividono
 l'assegnazione della settimana: la prima scelta riempie tutte le celle, mentre sostituzione
@@ -115,8 +128,14 @@ lettura; la conferma delle singole attività resta disponibile. Le sale operator
 i codici degli interventi e conservano l'ID paziente nei dati, senza visualizzarlo nelle schede.
 
 Il comando **Esporta PDF** crea un documento da stampa per l'intero mese o una singola
-settimana. I mesi usano A3 orizzontale, le settimane A4 orizzontale; la generazione usa Qt e
-non richiede dipendenze aggiuntive.
+settimana su un foglio A4 orizzontale, con un giorno per colonna come a schermo. La tabella
+occupa tutto il foglio e sabati e domeniche sono colonne strette. I nomi non vengono mai
+tagliati: nel mese compaiono come cognome e iniziale su due righe, nella settimana per esteso;
+il carattere è il più grande con cui tutti entrano nella colonna e un nome molto lungo viene al
+più compresso in larghezza. I colori sono fissi, quindi il PDF è uguale anche con un tema scuro
+del desktop. Se le righe non entrano in una pagina proseguono nella successiva con
+l'intestazione ripetuta e il numero di pagina. La generazione usa Qt e non richiede dipendenze
+aggiuntive.
 
 L'inserimento multiplo riconosce sia i template nativi sia i CSV TrackCare, inclusi separatore
 `;`, BOM, codifica UTF-8/Windows-1252 e intestazioni accentate o degradate come `Priorit�`

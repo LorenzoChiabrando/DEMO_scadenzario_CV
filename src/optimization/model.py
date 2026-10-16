@@ -34,23 +34,23 @@ def build_paper_model(data: SchedulingInput) -> BuiltSchedulingModel:
     errors: list[str] = []
     if data.changeover_minutes != 0:
         errors.append(
-            "build_paper_model requires changeover_minutes=0; "
-            "use build_platform_model for the empirical changeover rule"
+            "build_paper_model richiede changeover_minutes=0; "
+            "usare build_platform_model per la regola empirica dei tempi di cambio."
         )
     if any(session.available_resident_ids is not None for session in data.sessions):
         errors.append(
-            "build_paper_model does not include daily specialist availability; "
-            "use build_platform_model for platform availability bounds"
+            "build_paper_model non gestisce la disponibilità giornaliera degli specializzandi; "
+            "usare build_platform_model per i vincoli di disponibilità."
         )
     if any(patient.earliest_surgery_date is not None for patient in data.patients):
         errors.append(
-            "build_paper_model does not include patient insertion dates; "
-            "use build_platform_model for patient date bounds"
+            "build_paper_model non gestisce le date di inserimento dei pazienti; "
+            "usare build_platform_model per i vincoli sulle date."
         )
     if data.objective_weights != ObjectiveWeights():
         errors.append(
-            "build_paper_model requires the paper objective coefficients C, +1, -1; "
-            "use build_platform_model for experimental weights"
+            "build_paper_model richiede i coefficienti dell'obiettivo del paper C, +1, -1; "
+            "usare build_platform_model per pesi sperimentali."
         )
     if errors:
         raise InputValidationError(errors)
@@ -70,7 +70,7 @@ def build_platform_model(
         or isinstance(max_operations_per_session, bool)
         or max_operations_per_session <= 0
     ):
-        raise InputValidationError(["max_operations_per_session must be a positive integer"])
+        raise InputValidationError(["max_operations_per_session deve essere un intero positivo."])
     return _build_model(
         data,
         _BuildOptions(
@@ -97,8 +97,8 @@ def _build_model(data: SchedulingInput, options: _BuildOptions) -> BuiltScheduli
     if missing_sessions:
         raise InputValidationError(
             [
-                "the paper formulation requires one session v[k,t] for every room/day "
-                f"combination; missing {missing_sessions}"
+                "La formulazione del paper richiede una sessione v[k,t] per ogni "
+                f"combinazione sala/giorno; mancano {missing_sessions}."
             ]
         )
 

@@ -1,10 +1,8 @@
 import os
-from src.data_paths import PROJECT_ROOT
 from copy import deepcopy
 from PySide6.QtWidgets import (
-    QDialog, QVBoxLayout, QHBoxLayout, QLabel, QFrame,
-    QPushButton, QTableWidget, QTableWidgetItem, QHeaderView,
-    QFileDialog, QMessageBox, QComboBox, QScroller, QLineEdit,
+    QHBoxLayout, QLabel, QTableWidget, QTableWidgetItem, QHeaderView,
+    QFileDialog, QComboBox, QScroller, QLineEdit,
 )
 from PySide6.QtCore import Qt
 from PySide6.QtGui import QColor, QIntValidator
@@ -12,6 +10,8 @@ from PySide6.QtGui import QColor, QIntValidator
 from src.importers.patient_csv import (
     PatientCsvError, build_csv_interventions, read_patient_csv,
 )
+from src.views.components import messages
+from src.views.components.modal_dialog import ModalDialog
 
 _HEADERS = [
     "Nome", "Cognome", "Cod. diagnosi", "Descrizione diagnosi",
@@ -42,56 +42,43 @@ _FG_ERR = QColor("#b91c1c")
 _FG_OK  = QColor("#1e293b")
 
 
-class DialogBulkPazienti(QDialog):
+_SOTTOTITOLO = (
+    "Seleziona un CSV dello Scadenziario o un'esportazione TrackCare. "
+    "Separatore, codifica e intestazioni vengono riconosciuti automaticamente. "
+    "La diagnosi viene divisa in <b>codice ICD-9-CM</b> e <b>descrizione</b>. "
+    "La durata opzionale può essere <i>90</i> oppure <i>60;90</i> per più interventi. "
+    "Usa il punto e virgola (<b>;</b>) per separare più codici, descrizioni e durate nello stesso paziente. "
+    "I dati non disponibili in TrackCare restano visibili come <b>Da classificare</b>."
+)
+
+
+class DialogBulkPazienti(ModalDialog):
     def __init__(self, parent=None):
-        super().__init__(parent)
         self._interventi_per_riga: dict[int, list] = {}
         self._cell_changed_connected = False
         self._import_context = ""
-        self.setWindowTitle("Importa Pazienti da CSV")
+        super().__init__(
+            "Importa Pazienti da CSV",
+            _SOTTOTITOLO,
+            section="pazienti",
+            extra_styles=("pazienti.qss",),
+            parent=parent,
+        )
         self.setMinimumWidth(1060)
         self.setMinimumHeight(560)
         self.setSizeGripEnabled(True)
         self.setup_ui()
-        self.load_styles()
 
     def setup_ui(self):
-        layout = QVBoxLayout(self)
-        layout.setContentsMargins(28, 28, 28, 28)
+        layout = self.body
         layout.setSpacing(14)
-
-        lbl_titolo = QLabel("Importa Pazienti da CSV")
-        lbl_titolo.setObjectName("TitoloDialog")
-        lbl_titolo.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        layout.addWidget(lbl_titolo)
-
-        lbl_sub = QLabel(
-            "Seleziona un CSV dello Scadenziario o un'esportazione TrackCare. "
-            "Separatore, codifica e intestazioni vengono riconosciuti automaticamente. "
-            "La diagnosi viene divisa in <b>codice ICD-9-CM</b> e <b>descrizione</b>. "
-            "La durata opzionale può essere <i>90</i> oppure <i>60;90</i> per più interventi. "
-            "Usa il punto e virgola (<b>;</b>) per separare più codici, descrizioni e durate nello stesso paziente. "
-            "I dati non disponibili in TrackCare restano visibili come <b>Da classificare</b>."
-        )
-        lbl_sub.setObjectName("SottoTitoloDialog")
-        lbl_sub.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        lbl_sub.setWordWrap(True)
-        layout.addWidget(lbl_sub)
-
-        sep = QFrame()
-        sep.setObjectName("SeparatoreDialog")
-        sep.setFixedHeight(1)
-        layout.addWidget(sep)
 
         file_row = QHBoxLayout()
         self.lbl_file = QLabel("Nessun file selezionato")
         self.lbl_file.setObjectName("LblFileCSV")
         self.lbl_file.setFixedHeight(32)
 
-        self.btn_sfoglia = QPushButton("Sfoglia…")
-        self.btn_sfoglia.setObjectName("BtnAnnullaDialog")
-        self.btn_sfoglia.setFixedSize(110, 36)
-        self.btn_sfoglia.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.btn_sfoglia = self.make_button("Sfoglia…", "secondary")
         self.btn_sfoglia.clicked.connect(self._scegli_file)
 
         file_row.addWidget(self.lbl_file, stretch=1)
@@ -140,25 +127,14 @@ class DialogBulkPazienti(QDialog):
         # Evita cellChanged durante il caricamento iniziale.
         layout.addWidget(self.tabella)
 
-        btn_layout = QHBoxLayout()
-        btn_layout.setSpacing(12)
-
-        self.btn_annulla = QPushButton("Annulla")
-        self.btn_annulla.setObjectName("BtnAnnullaDialog")
-        self.btn_annulla.setFixedHeight(44)
-        self.btn_annulla.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.btn_annulla = self.make_button("Annulla", "secondary")
         self.btn_annulla.clicked.connect(self.reject)
 
-        self.btn_importa = QPushButton("Importa Pazienti")
-        self.btn_importa.setObjectName("BtnSalvaDialog")
-        self.btn_importa.setFixedHeight(44)
-        self.btn_importa.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.btn_importa = self.make_button("Importa Pazienti", "primary")
         self.btn_importa.setEnabled(False)
         self.btn_importa.clicked.connect(self._conferma_importazione)
 
-        btn_layout.addWidget(self.btn_annulla)
-        btn_layout.addWidget(self.btn_importa)
-        layout.addLayout(btn_layout)
+        self.add_footer(self.btn_annulla, self.btn_importa)
 
     def _scegli_file(self):
         path, _ = QFileDialog.getOpenFileName(
@@ -179,7 +155,9 @@ class DialogBulkPazienti(QDialog):
         try:
             result = read_patient_csv(path)
         except PatientCsvError as error:
-            QMessageBox.critical(self, "Errore lettura file", str(error))
+            messages.show_message(
+                self, "Errore lettura file", str(error), section="pazienti", kind="error"
+            )
             return
 
         if not result.rows:
@@ -382,12 +360,23 @@ class DialogBulkPazienti(QDialog):
 
     def _conferma_importazione(self):
         if self._conta_righe_valide() != self.tabella.rowCount():
-            QMessageBox.warning(self, "Dati incompleti", "Correggi le righe evidenziate.")
+            messages.show_message(
+                self,
+                "Dati incompleti",
+                "Correggi le righe evidenziate.",
+                section="pazienti",
+                kind="warning",
+            )
             return
         pazienti = self.get_pazienti()
         if not pazienti:
-            QMessageBox.warning(self, "Nessun paziente valido",
-                                "Nessuna riga ha nome e cognome compilati.")
+            messages.show_message(
+                self,
+                "Nessun paziente valido",
+                "Nessuna riga ha nome e cognome compilati.",
+                section="pazienti",
+                kind="warning",
+            )
             return
         self.accept()
 
@@ -437,9 +426,3 @@ class DialogBulkPazienti(QDialog):
                 "note":                   "",
             })
         return pazienti
-
-    def load_styles(self):
-        style_path = os.path.join(PROJECT_ROOT, "asset", "styles", "pazienti.qss")
-        if os.path.exists(style_path):
-            with open(style_path, "r", encoding="utf-8") as f:
-                self.setStyleSheet(f.read())

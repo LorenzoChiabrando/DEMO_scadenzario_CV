@@ -13,11 +13,13 @@ def parse_patient_insertion_date(value: object) -> date:
     """Parse the platform's DD/MM/YYYY insertion date; reject missing/invalid values."""
 
     if not isinstance(value, str):
-        raise ValueError("patient insertion date is missing")
+        raise ValueError("Manca la data di inserimento del paziente.")
     try:
         return datetime.strptime(value, "%d/%m/%Y").date()
     except ValueError as exc:
-        raise ValueError("patient insertion date must be a valid DD/MM/YYYY date") from exc
+        raise ValueError(
+            "La data di inserimento del paziente deve essere nel formato GG/MM/AAAA."
+        ) from exc
 
 
 def normalize_diagnosis(code: str, description: str) -> tuple[str, str, str]:

@@ -1,7 +1,8 @@
 from datetime import date as _date, timedelta as _td
 
 from PySide6.QtCore import Qt
-from PySide6.QtWidgets import QListWidgetItem, QMessageBox
+from PySide6.QtWidgets import QListWidgetItem
+from src.views.components import messages
 from src.views.view_nuovo_specializzando import DialogNuovoSpecializzando
 
 _SLOT_TO_ORE = {
@@ -396,14 +397,15 @@ class ControllerLibretto:
             f"{self._spec_corrente.get('cognome','').upper()} "
             f"{self._spec_corrente.get('nome','')}"
         )
-        risposta = QMessageBox.question(
+        if messages.ask_confirmation(
             self.view,
             "Conferma Eliminazione",
             f"Vuoi eliminare definitivamente il libretto di {nome_display}?\n\n"
             "Questa operazione non è reversibile.",
-            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
-        )
-        if risposta == QMessageBox.StandardButton.Yes:
+            section="libretto",
+            confirm_text="Elimina",
+            destructive=True,
+        ):
             self.model.elimina_specializzando(self._spec_corrente["id"])
             self._spec_corrente = None
             self.aggiorna_lista()

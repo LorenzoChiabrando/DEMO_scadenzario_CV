@@ -13,7 +13,7 @@ class InputValidationError(OptimizationError, ValueError):
     def __init__(self, errors: Iterable[str]) -> None:
         self.errors = tuple(errors)
         details = "\n".join(f"- {error}" for error in self.errors)
-        super().__init__(f"Invalid scheduling input:\n{details}")
+        super().__init__(f"Dati di pianificazione non validi:\n{details}")
 
 
 class SolverUnavailableError(OptimizationError):

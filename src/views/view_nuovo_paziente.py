@@ -1,21 +1,31 @@
-import os
-from src.data_paths import PROJECT_ROOT
 from PySide6.QtWidgets import (
-    QDialog, QWidget, QVBoxLayout, QHBoxLayout, QLabel, QFrame,
-    QLineEdit, QComboBox, QPushButton, QMessageBox, QTextEdit, QScrollArea,
+    QWidget, QVBoxLayout, QHBoxLayout, QLabel, QFrame,
+    QLineEdit, QComboBox, QPushButton, QTextEdit,
     QSpinBox, QAbstractSpinBox,
 )
 from PySide6.QtCore import Qt
 
 from src.patient_fields import DEFAULT_INTERVENTION_MINUTES, UNCLASSIFIED, normalize_diagnosis
+from src.views.components import messages
+from src.views.components.modal_dialog import ModalDialog
 
 
-class DialogNuovoPaziente(QDialog):
+class DialogNuovoPaziente(ModalDialog):
     def __init__(self, parent=None, paziente_dati=None):
-        super().__init__(parent)
         self._paz_dati = paziente_dati
         self._edit_mode = paziente_dati is not None
         self._custom_durations = self._edit_mode
+        super().__init__(
+            "Modifica Paziente" if self._edit_mode else "Aggiungi Paziente",
+            (
+                "Modifica le informazioni del paziente." if self._edit_mode
+                else "Usa gli stessi dati del CSV. Solo Nome e Cognome sono obbligatori."
+            ),
+            section="pazienti",
+            scrollable=True,
+            extra_styles=("pazienti.qss",),
+            parent=parent,
+        )
         self.setWindowTitle("Modifica Paziente" if self._edit_mode else "Nuovo Paziente")
         self.setMinimumWidth(620)
         self.setMinimumHeight(600)
@@ -28,55 +38,10 @@ class DialogNuovoPaziente(QDialog):
         else:
             self._aggiungi_riga_intervento()
         self._mostra_dati_aggiuntivi(self._edit_mode)
-        self.load_styles()
 
     def setup_ui(self):
-        root = QVBoxLayout(self)
-        root.setContentsMargins(0, 0, 0, 0)
-        root.setSpacing(0)
-
-        accent = QFrame()
-        accent.setObjectName("AccentBarDialog")
-        accent.setFixedHeight(5)
-        root.addWidget(accent)
-
-        scroll = QScrollArea()
-        scroll.setWidgetResizable(True)
-        scroll.setFrameShape(QFrame.Shape.NoFrame)
-        scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
-        scroll.setStyleSheet("QScrollArea { background: #ffffff; border: none; }")
-
-        content = QWidget()
-        content.setObjectName("DialogContent")
-        content.setStyleSheet("QWidget#DialogContent { background: #ffffff; }")
-        layout = QVBoxLayout(content)
-        layout.setContentsMargins(36, 28, 36, 28)
+        layout = self.body
         layout.setSpacing(14)
-        scroll.setWidget(content)
-        root.addWidget(scroll)
-
-        titolo_row = QHBoxLayout()
-        titolo_row.setSpacing(10)
-        lbl_titolo = QLabel("Modifica Paziente" if self._edit_mode else "Aggiungi Paziente")
-        lbl_titolo.setObjectName("TitoloDialog")
-        titolo_row.addWidget(lbl_titolo)
-        titolo_row.addStretch()
-        layout.addLayout(titolo_row)
-
-        lbl_sub = QLabel(
-            "Modifica le informazioni del paziente." if self._edit_mode
-            else "Usa gli stessi dati del CSV. Solo Nome e Cognome sono obbligatori."
-        )
-        lbl_sub.setObjectName("SottoTitoloDialog")
-        lbl_sub.setWordWrap(True)
-        layout.addWidget(lbl_sub)
-
-        sep = QFrame()
-        sep.setObjectName("SeparatoreDialog")
-        sep.setFixedHeight(1)
-        layout.addSpacing(2)
-        layout.addWidget(sep)
-        layout.addSpacing(4)
 
         nome_cogn = QHBoxLayout()
         nome_cogn.setSpacing(12)
@@ -239,26 +204,18 @@ class DialogNuovoPaziente(QDialog):
         grp_note.addWidget(self.input_note)
         extra_layout.addLayout(grp_note)
 
-        btn_layout = QHBoxLayout()
-        btn_layout.setSpacing(12)
+        layout.addStretch(1)
 
-        self.btn_annulla = QPushButton("Annulla")
-        self.btn_annulla.setObjectName("BtnAnnullaDialog")
-        self.btn_annulla.setFixedHeight(44)
-        self.btn_annulla.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.btn_annulla = self.make_button("Annulla", "secondary")
         self.btn_annulla.clicked.connect(self.reject)
 
-        self.btn_salva = QPushButton(
-            "Salva Modifiche" if self._edit_mode else "Salva Paziente"
+        self.btn_salva = self.make_button(
+            "Salva Modifiche" if self._edit_mode else "Salva Paziente", "primary"
         )
-        self.btn_salva.setObjectName("BtnSalvaDialog")
-        self.btn_salva.setFixedHeight(44)
-        self.btn_salva.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.btn_salva.setDefault(True)
         self.btn_salva.clicked.connect(self._valida_e_salva)
 
-        btn_layout.addWidget(self.btn_annulla)
-        btn_layout.addWidget(self.btn_salva)
-        layout.addLayout(btn_layout)
+        self.add_footer(self.btn_annulla, self.btn_salva)
 
     def _campo(self, etichetta, attr_name, placeholder):
         grp = QWidget()
@@ -424,9 +381,12 @@ class DialogNuovoPaziente(QDialog):
         nome = self.input_nome.text().strip()
         cognome = self.input_cognome.text().strip()
         if not nome or not cognome:
-            QMessageBox.warning(
-                self, "Campi Incompleti",
-                "Nome e Cognome sono obbligatori, come nell'inserimento da CSV."
+            messages.show_message(
+                self,
+                "Campi Incompleti",
+                "Nome e Cognome sono obbligatori, come nell'inserimento da CSV.",
+                section="pazienti",
+                kind="warning",
             )
             return
         self.accept()
@@ -462,12 +422,3 @@ class DialogNuovoPaziente(QDialog):
             "stato": self.combo_stato.currentText(),
             "note": self.input_note.toPlainText().strip(),
         }
-
-    def load_styles(self):
-        style_path = os.path.join(PROJECT_ROOT, "asset", "styles", "pazienti.qss")
-        if os.path.exists(style_path):
-            with open(style_path, "r", encoding="utf-8") as f:
-                base = f.read()
-        else:
-            base = ""
-        self.setStyleSheet(base + "\nQDialog { background-color: #ffffff; }")

@@ -167,7 +167,7 @@ def test_normal_sequential_planning_excludes_patients_in_other_drafts(
     synthetic_root: Path,
 ) -> None:
     plan_platform_week(synthetic_root, MONDAY, persist=True)
-    with pytest.raises(PlatformDataError, match="no waiting-list patients"):
+    with pytest.raises(PlatformDataError, match="Non ci sono pazienti in lista d'attesa"):
         load_platform_context(synthetic_root, NEXT_MONDAY)
 
 
@@ -254,7 +254,7 @@ def test_patient_write_failure_rolls_back_plan_and_already_updated_patients(
         real_replace(source, destination)
 
     monkeypatch.setattr(platform_io.os, "replace", fail_last_patient_once)
-    with pytest.raises(PlatformPersistenceError, match="rolled back"):
+    with pytest.raises(PlatformPersistenceError, match="dati precedenti sono stati ripristinati"):
         persist_platform_week_plan(synthetic_root, run.plan, overwrite=False)
     assert failed
     assert {path: path.read_bytes() for path in paths} == originals

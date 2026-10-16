@@ -3,13 +3,14 @@ from __future__ import annotations
 from pathlib import Path
 
 import pytest
-from PySide6.QtWidgets import QApplication, QDialog, QMessageBox, QWidget
+from PySide6.QtWidgets import QApplication, QDialog, QWidget
 
 from src.controllers import controller_pazienti
 from src.controllers.controller_pazienti import ControllerPazienti
 from src.importers.patient_csv import read_patient_csv
 from src.models.data_manager_pazienti import DataManagerPazienti
 from src.patient_fields import normalize_diagnosis
+from src.views.components import messages as dialog_messages
 from src.views.dialog_bulk_pazienti import DialogBulkPazienti
 from src.views.view_nuovo_paziente import DialogNuovoPaziente
 
@@ -65,7 +66,9 @@ def test_manual_form_requires_only_names_and_hides_optional_fields(
     qt_app: QApplication, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     messages = []
-    monkeypatch.setattr(QMessageBox, "warning", lambda *args: messages.append(args[2]))
+    monkeypatch.setattr(
+        dialog_messages, "show_message", lambda *args, **_k: messages.append(args[2])
+    )
     dialog = DialogNuovoPaziente()
     assert dialog.dati_aggiuntivi.isHidden()
     assert dialog._interventi_rows[0]["input_durata"].isHidden()

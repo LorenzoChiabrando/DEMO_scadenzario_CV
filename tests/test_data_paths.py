@@ -30,7 +30,7 @@ def test_relative_paths_are_project_relative(tmp_path, monkeypatch):
 
 def test_empty_environment_is_not_silently_ignored(monkeypatch):
     monkeypatch.setenv("MMSD_DATA_DIR", "  ")
-    with pytest.raises(ValueError, match="empty"):
+    with pytest.raises(ValueError, match="vuota"):
         resolve_data_directory()
 
 

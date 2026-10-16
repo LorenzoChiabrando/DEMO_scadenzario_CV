@@ -200,7 +200,7 @@ QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical
 /* =========================================
    TABELLA CALENDARIO
 ========================================= */
-QTableWidget {
+QTableView {
     background-color: #ffffff;
     gridline-color: #e2e8f0;
     border: 1px solid #cbd5e1;
@@ -209,9 +209,9 @@ QTableWidget {
     color: #1e293b;
     outline: 0;
 }
-QTableWidget::item { padding: 3px; }
-QTableWidget[compact="true"]::item { padding: 0px; }
-QTableWidget::item:selected {
+QTableView::item { padding: 3px; }
+QTableView[compact="true"]::item { padding: 0px; }
+QTableView::item:selected {
     background-color: #e0e7ff;
     color: #3730a3;
 }

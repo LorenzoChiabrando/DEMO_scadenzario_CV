@@ -1,5 +1,6 @@
 from PySide6.QtCore import Qt
-from PySide6.QtWidgets import QListWidgetItem, QMessageBox
+from PySide6.QtWidgets import QListWidgetItem
+from src.views.components import messages
 from src.views.view_nuovo_paziente import DialogNuovoPaziente
 from src.views.dialog_bulk_pazienti import DialogBulkPazienti
 
@@ -177,11 +178,12 @@ class ControllerPazienti:
             for dati in pazienti:
                 self.model.crea_nuovo_paziente(dati)
             if pazienti:
-                QMessageBox.information(
+                messages.show_message(
                     self.view,
                     "Inserimento completato",
                     f"{len(pazienti)} pazient{'e' if len(pazienti) == 1 else 'i'} "
-                    f"aggiunt{'o' if len(pazienti) == 1 else 'i'} alla lista d'attesa."
+                    f"aggiunt{'o' if len(pazienti) == 1 else 'i'} alla lista d'attesa.",
+                    section="pazienti",
                 )
             self.aggiorna_lista()
 
@@ -210,14 +212,15 @@ class ControllerPazienti:
             f"{self._paz_corrente.get('cognome','').upper()} "
             f"{self._paz_corrente.get('nome','')}"
         )
-        risposta = QMessageBox.question(
+        if messages.ask_confirmation(
             self.view,
             "Conferma Eliminazione",
             f"Vuoi eliminare definitivamente il paziente {nome_display}?\n\n"
             "Questa operazione non è reversibile.",
-            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
-        )
-        if risposta == QMessageBox.StandardButton.Yes:
+            section="pazienti",
+            confirm_text="Elimina",
+            destructive=True,
+        ):
             self.model.elimina_paziente(self._paz_corrente["id"])
             self._paz_corrente = None
             self.aggiorna_lista()

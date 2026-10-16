@@ -29,13 +29,13 @@ class HighsConfig:
 
     def __post_init__(self) -> None:
         if not math.isfinite(self.time_limit_seconds) or self.time_limit_seconds <= 0:
-            raise ValueError("time_limit_seconds must be finite and positive")
+            raise ValueError("time_limit_seconds deve essere finito e positivo.")
         if not math.isfinite(self.mip_relative_gap) or not 0 <= self.mip_relative_gap < 1:
-            raise ValueError("mip_relative_gap must be finite and in [0, 1)")
+            raise ValueError("mip_relative_gap deve essere finito e compreso in [0, 1).")
         if self.threads <= 0:
-            raise ValueError("threads must be positive")
+            raise ValueError("threads deve essere positivo.")
         if self.random_seed < 0:
-            raise ValueError("random_seed cannot be negative")
+            raise ValueError("random_seed non può essere negativo.")
 
 
 class HighsSolver:
@@ -62,9 +62,9 @@ class HighsSolver:
         availability = solver.available()
         if not bool(availability):
             raise SolverUnavailableError(
-                "HiGHS is unavailable. Install project dependencies with "
+                "Il solver HiGHS non è disponibile. Installare le dipendenze del progetto con "
                 "`python -m pip install -r requirements.txt`. "
-                f"Pyomo reported: {availability}"
+                f"Stato riportato da Pyomo: {availability}"
             )
 
         solver.config.load_solution = False
@@ -152,7 +152,7 @@ def _attach_highs_cancellation(
     backend = getattr(solver, "_solver_model", None)
     if backend is None:
         raise SolverUnavailableError(
-            "Pyomo APPSI HiGHS did not expose an initialized highspy model"
+            "Pyomo APPSI HiGHS non ha esposto un modello highspy inizializzato."
         )
 
     channels: list[Any] = []
@@ -162,7 +162,7 @@ def _attach_highs_cancellation(
             getattr(channel, "unsubscribe", None)
         ):
             raise SolverUnavailableError(
-                f"The installed highspy version lacks cancellation callback {name}"
+                f"La versione installata di highspy non offre la callback di annullamento {name}."
             )
         channels.append(channel)
 
@@ -177,7 +177,9 @@ def _attach_highs_cancellation(
     except Exception as exc:
         for channel in reversed(subscribed):
             channel.unsubscribe(interrupt_if_requested)
-        raise SolverUnavailableError("HiGHS cancellation callbacks could not be installed") from exc
+        raise SolverUnavailableError(
+            "Impossibile installare le callback di annullamento di HiGHS."
+        ) from exc
 
     def detach() -> None:
         for channel in reversed(subscribed):
@@ -288,16 +290,20 @@ def _validate_solution(
     for patient in source.patients:
         count = len(scheduled_by_patient.get(patient.patient_id, []))
         if patient.category is PatientCategory.WAITING_LIST and count > 1:
-            errors.append(f"waiting-list patient {patient.patient_id!r} scheduled {count} times")
+            errors.append(
+                f"Paziente in lista d'attesa {patient.patient_id!r} pianificato {count} volte."
+            )
         if patient.category is not PatientCategory.WAITING_LIST and count != 1:
-            errors.append(f"required patient {patient.patient_id!r} scheduled {count} times")
+            errors.append(
+                f"Paziente obbligatorio {patient.patient_id!r} pianificato {count} volte."
+            )
 
     session_load: dict[tuple[str, object], list[int]] = {}
     for record in schedule:
         patient = patient_by_id[record.patient_id]
         if patient.earliest_surgery_date is not None and record.day < patient.earliest_surgery_date:
             errors.append(
-                f"patient {record.patient_id!r} is scheduled before the insertion date"
+                f"Paziente {record.patient_id!r} pianificato prima della data di inserimento."
             )
         key = (record.room_id, record.day)
         session_load.setdefault(key, []).append(patient.duration_minutes)
@@ -309,8 +315,8 @@ def _validate_solution(
                 and record.resident_id != resident_id
             ):
                 errors.append(
-                    f"patient {record.patient_id!r} requires rostered resident "
-                    f"{resident_id!r} in session {session.key!r} under (1d)"
+                    f"Il paziente {record.patient_id!r} richiede lo specializzando di turno "
+                    f"{resident_id!r} nella sessione {session.key!r} secondo il vincolo (1d)."
                 )
         if (
             record.resident_id is not None
@@ -318,7 +324,8 @@ def _validate_solution(
             and record.resident_id not in session.available_resident_ids
         ):
             errors.append(
-                f"resident {record.resident_id!r} is unavailable for session {session.key!r}"
+                f"Lo specializzando {record.resident_id!r} non è disponibile per la sessione "
+                f"{session.key!r}."
             )
 
     for session in source.sessions:
@@ -328,23 +335,26 @@ def _validate_solution(
             occupied += source.changeover_minutes * (len(durations) - 1)
         if occupied > session.capacity_minutes + tolerance:
             errors.append(
-                f"session {session.key!r} uses {occupied} of {session.capacity_minutes} minutes"
+                f"La sessione {session.key!r} occupa {occupied} minuti su "
+                f"{session.capacity_minutes}."
             )
 
     unassigned = sum(record.resident_id is None for record in schedule)
     if unassigned != objective.unassigned_count:
         errors.append(
-            f"reported unassigned_count={objective.unassigned_count}, extracted {unassigned}"
+            f"unassigned_count dichiarato {objective.unassigned_count}, ricalcolato {unassigned}."
         )
 
     actual_floor = _actual_fairness_floor(built, schedule)
     if objective.fairness_floor != actual_floor:
         errors.append(
-            f"reported fairness_floor={objective.fairness_floor}, extracted {actual_floor}"
+            f"fairness_floor dichiarato {objective.fairness_floor}, ricalcolato {actual_floor}."
         )
 
     if errors:
-        raise SolutionValidationError("Invalid solver incumbent:\n- " + "\n- ".join(errors))
+        raise SolutionValidationError(
+            "Soluzione del solver non valida:\n- " + "\n- ".join(errors)
+        )
 
 
 def _actual_fairness_floor(

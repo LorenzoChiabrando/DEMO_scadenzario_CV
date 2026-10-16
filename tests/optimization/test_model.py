@@ -315,5 +315,5 @@ def test_paper_builder_requires_a_complete_room_day_grid() -> None:
         ),
     )
 
-    with pytest.raises(InputValidationError, match="every room/day combination"):
+    with pytest.raises(InputValidationError, match="ogni combinazione sala/giorno"):
         build_paper_model(data)
