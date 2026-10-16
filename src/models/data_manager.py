@@ -1,10 +1,13 @@
-import json
+import logging
 import os
 from datetime import date, timedelta
 from pathlib import Path
 
 from src.data_paths import resolve_data_directory
+from src.models.json_files import CorruptedDataError, read_json_object, write_json_atomic
 from src.planning_schema import OPTIMIZATION_KEY, default_schedule_optimization
+
+_LOGGER = logging.getLogger(__name__)
 
 class DataManager:
     def __init__(self, dir_scadenzario=None, dir_libretti=None):
@@ -16,8 +19,6 @@ class DataManager:
             dir_libretti if dir_libretti is not None
             else Path(self.dir_scadenzario).resolve().parent / "libretti"
         )
-        self.specializzandi = self.load_anagrafica()
-        
         self._cached_anno = None
         self._cached_mese = None
         self._cached_data = None
@@ -34,8 +35,9 @@ class DataManager:
             
         filepath = self._get_filepath(anno, mese)
         if os.path.exists(filepath):
-            with open(filepath, 'r', encoding='utf-8') as f:
-                data = json.load(f)
+            # Un file danneggiato solleva CorruptedDataError: mai trattarlo come mese vuoto,
+            # altrimenti il primo salvataggio lo sovrascriverebbe.
+            data = read_json_object(filepath)
         else:
             data = {
                 "metadata": {"stato": "BOZZA"},
@@ -48,14 +50,29 @@ class DataManager:
         self._cached_data = data
         return data
 
+    def invalidate_cache(self):
+        """Fa rileggere il mese dal disco alla prossima richiesta."""
+        self._cached_anno = None
+        self._cached_mese = None
+        self._cached_data = None
+
     def save_mese(self, anno, mese, data):
         filepath = self._get_filepath(anno, mese)
-        with open(filepath, 'w', encoding='utf-8') as f:
-            json.dump(data, f, indent=4)
-            
+        try:
+            write_json_atomic(filepath, data)
+        except (OSError, TypeError, ValueError):
+            # ``data`` è già stato modificato in memoria: la cache tornerebbe dati mai salvati.
+            self.invalidate_cache()
+            raise
+
         self._cached_anno = anno
         self._cached_mese = mese
         self._cached_data = data
+
+    @property
+    def specializzandi(self):
+        """Anagrafica riletta a ogni accesso: il Libretto la modifica mentre l'app è aperta."""
+        return self.load_anagrafica()
 
     def load_anagrafica(self):
         specializzandi = []
@@ -65,10 +82,9 @@ class DataManager:
             if filename.endswith(".json"):
                 filepath = os.path.join(self.dir_libretti, filename)
                 try:
-                    with open(filepath, 'r', encoding='utf-8') as f:
-                        specializzandi.append(json.load(f))
-                except (json.JSONDecodeError, OSError):
-                    pass
+                    specializzandi.append(read_json_object(filepath))
+                except (CorruptedDataError, OSError):
+                    _LOGGER.warning("Libretto illeggibile ignorato: %s", filename)
         return specializzandi
 
     def get_specializzandi_attivi(self):

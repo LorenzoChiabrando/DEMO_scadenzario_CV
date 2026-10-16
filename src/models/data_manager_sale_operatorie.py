@@ -5,6 +5,7 @@ from datetime import datetime
 from pathlib import Path
 
 from src.data_paths import resolve_data_directory
+from src.models.json_files import read_json_object
 from src.models.patient_plan_state import patient_status_updates, write_json_batch
 
 
@@ -50,8 +51,8 @@ class DataManagerSaleOperatorie:
 
         filepath = self._get_filepath(anno, mese)
         if os.path.exists(filepath):
-            with open(filepath, 'r', encoding='utf-8') as f:
-                data = json.load(f)
+            # Un file danneggiato solleva CorruptedDataError: mai trattarlo come mese vuoto.
+            data = read_json_object(filepath)
         else:
             data = {
                 "metadata": {"stato": "BOZZA"},

@@ -11,6 +11,7 @@ SECTION_ACCENTS = {
     "libretto": "#4338ca",
     "scadenzario": "#4338ca",
     "sale_operatorie": "#6f42c1",
+    "generale": "#334155",
 }
 WARNING_ACCENT = "#d97706"
 ERROR_ACCENT = "#b91c1c"

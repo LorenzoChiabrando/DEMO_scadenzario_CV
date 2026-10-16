@@ -1,12 +1,18 @@
 from __future__ import annotations
 
 import argparse
+import logging
 import sys
+from collections.abc import Callable
+from logging.handlers import RotatingFileHandler
 from pathlib import Path
 from PySide6.QtWidgets import QApplication, QMainWindow, QWidget, QHBoxLayout, QStackedWidget
 from PySide6.QtCore import QLoggingCategory
 
-from src.data_paths import resolve_data_directory
+from src.data_paths import PROJECT_ROOT, resolve_data_directory
+from src.models.json_files import CorruptedDataError
+from src.views.components import messages
+from src.views.components.error_handler import install_exception_hook
 from src.controllers.controller_sale_operatorie import ControllerSaleOperatorie
 from src.models.data_manager_sale_operatorie import DataManagerSaleOperatorie
 from src.views.view_sidebar import Sidebar
@@ -20,6 +26,61 @@ from src.models.data_manager_libretto import DataManagerLibretto
 from src.controllers.controller_libretto import ControllerLibretto
 from src.models.data_manager_pazienti import DataManagerPazienti
 from src.controllers.controller_pazienti import ControllerPazienti
+
+_LOGGER = logging.getLogger("mmsd_cv")
+
+LOG_FILE = PROJECT_ROOT / "logs" / "mmsd-cv.log"
+_LOG_MAX_BYTES = 1_000_000
+_LOG_BACKUPS = 3
+_LOG_FORMAT = "%(asctime)s %(levelname)s %(name)s: %(message)s"
+
+
+def configure_logging(log_file: Path = LOG_FILE) -> Path | None:
+    """Configura il logging dell'applicazione (solo qui, al punto d'ingresso).
+
+    Scrive tutto da INFO in su in ``log_file`` (a rotazione: 1 MB per 3 file) e mostra
+    sul terminale gli avvisi. Restituisce il file di log, oppure ``None`` se non è
+    scrivibile: in quel caso l'app parte comunque, con i soli avvisi sul terminale.
+    """
+    root = logging.getLogger()
+    root.setLevel(logging.INFO)
+    console = logging.StreamHandler()
+    console.setLevel(logging.WARNING)
+    console.setFormatter(logging.Formatter(_LOG_FORMAT))
+    root.addHandler(console)
+    try:
+        log_file.parent.mkdir(parents=True, exist_ok=True)
+        file_handler = RotatingFileHandler(
+            log_file, maxBytes=_LOG_MAX_BYTES, backupCount=_LOG_BACKUPS, encoding="utf-8"
+        )
+    except OSError:
+        _LOGGER.warning("Log su file non disponibile: %s", log_file.name)
+        return None
+    file_handler.setFormatter(logging.Formatter(_LOG_FORMAT))
+    root.addHandler(file_handler)
+    return log_file
+
+
+def open_main_window(create_window: Callable[[], QMainWindow]) -> QMainWindow | None:
+    """Crea la finestra principale; con dati danneggiati avvisa e restituisce ``None``.
+
+    Un file danneggiato non viene mai letto come vuoto (vedi ``read_json_object``):
+    meglio fermarsi spiegando quale file sistemare che lavorare su dati incompleti.
+    Gli altri errori proseguono verso il gestore globale.
+    """
+    try:
+        return create_window()
+    except CorruptedDataError as error:
+        _LOGGER.error("Avvio interrotto: file danneggiato %s", error.path.name)
+        messages.show_message(
+            None,
+            "Impossibile avviare l'applicazione",
+            str(error),
+            section="generale",
+            kind="error",
+        )
+        return None
+
 
 class MainWindow(QMainWindow):
     def __init__(self, data_directory: str | Path | None = None):
@@ -133,15 +194,22 @@ class MainWindow(QMainWindow):
             return
         super().closeEvent(event)
 
-if __name__ == "__main__":
+def main() -> int:
     parser = argparse.ArgumentParser(description="MMSD CV")
     parser.add_argument("--data-dir", type=Path, help="Cartella dati condivisa da GUI e planner")
     args, qt_args = parser.parse_known_args()
+    log_file = configure_logging()
     app = QApplication([sys.argv[0], *qt_args])
     QLoggingCategory.setFilterRules("qt.qpa.wayland.textinput=false")
     app.setStyle("Fusion")
+    install_exception_hook(log_file)
 
-    window = MainWindow(data_directory=args.data_dir)
+    window = open_main_window(lambda: MainWindow(data_directory=args.data_dir))
+    if window is None:
+        return 1
     window.show()
+    return app.exec()
 
-    sys.exit(app.exec())
+
+if __name__ == "__main__":
+    sys.exit(main())

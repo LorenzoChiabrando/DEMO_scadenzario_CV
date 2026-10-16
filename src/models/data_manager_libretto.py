@@ -1,9 +1,13 @@
 import os
 import json
+import logging
 from datetime import date as _date
 
 from src.data_paths import resolve_data_directory
 from src.models.id_generator import next_available_id
+from src.models.json_files import CorruptedDataError, read_json_object, write_json_atomic
+
+_LOGGER = logging.getLogger(__name__)
 
 class DataManagerLibretto:
     def __init__(self, dir_libretti=None):
@@ -19,20 +23,18 @@ class DataManagerLibretto:
         for filename in os.listdir(self.dir_libretti):
             if filename.endswith(".json"):
                 filepath = os.path.join(self.dir_libretti, filename)
-                with open(filepath, 'r', encoding='utf-8') as f:
-                    try:
-                        data = json.load(f)
-                        specializzandi.append(data)
-                    except json.JSONDecodeError:
-                        pass 
+                try:
+                    specializzandi.append(read_json_object(filepath))
+                except CorruptedDataError:
+                    # Un libretto rotto non deve nascondere tutti gli altri.
+                    _LOGGER.warning("Libretto danneggiato ignorato: %s", filename)
         
         return sorted(specializzandi, key=lambda x: x.get('cognome', ''))
         
     def get_specializzando_by_id(self, spec_id):
         filepath = os.path.join(self.dir_libretti, f"{spec_id}.json")
         if os.path.exists(filepath):
-            with open(filepath, 'r', encoding='utf-8') as f:
-                return json.load(f)
+            return read_json_object(filepath)
         return None
 
     def crea_nuovo_specializzando(self, dati_form):
@@ -63,8 +65,7 @@ class DataManagerLibretto:
         filepath = os.path.join(self.dir_libretti, f"{spec_id}.json")
         if not os.path.exists(filepath):
             return None
-        with open(filepath, 'r', encoding='utf-8') as f:
-            spec = json.load(f)
+        spec = read_json_object(filepath)
         spec.update({
             "matricola": dati["matricola"],
             "nome":      dati["nome"],
@@ -72,8 +73,7 @@ class DataManagerLibretto:
             "livello":   dati["livello"],
             "stato":     dati["stato"],
         })
-        with open(filepath, 'w', encoding='utf-8') as f:
-            json.dump(spec, f, indent=4)
+        write_json_atomic(filepath, spec)
         return spec
 
     def elimina_specializzando(self, spec_id):
@@ -112,8 +112,7 @@ class DataManagerLibretto:
                 continue
             spec_id = spec["id"]
             filepath = os.path.join(self.dir_libretti, f"{spec_id}.json")
-            with open(filepath, "r", encoding="utf-8") as f:
-                dati = json.load(f)
+            dati = read_json_object(filepath)
 
             if "attivita" not in dati:
                 dati["attivita"] = []
@@ -127,8 +126,7 @@ class DataManagerLibretto:
 
             dati["attivita"].sort(key=lambda a: (a.get("data", ""), a.get("slot", "")))
 
-            with open(filepath, "w", encoding="utf-8") as f:
-                json.dump(dati, f, indent=4)
+            write_json_atomic(filepath, dati)
 
     def get_attivita(self, spec_id: str) -> list:
         spec = self.get_specializzando_by_id(spec_id)
@@ -146,8 +144,7 @@ class DataManagerLibretto:
         filepath = os.path.join(self.dir_libretti, f"{spec_id}.json")
         if not os.path.exists(filepath):
             return
-        with open(filepath, 'r', encoding='utf-8') as f:
-            dati = json.load(f)
+        dati = read_json_object(filepath)
         if "attivita_extra" not in dati:
             dati["attivita_extra"] = []
         chiave = (att_data.get("data"), att_data.get("sede"), att_data.get("attivita"))
@@ -158,8 +155,7 @@ class DataManagerLibretto:
         else:
             dati["attivita_extra"].append(att_data)
         dati["attivita_extra"].sort(key=lambda a: (a.get("data", ""), a.get("sede", "")))
-        with open(filepath, 'w', encoding='utf-8') as f:
-            json.dump(dati, f, indent=4)
+        write_json_atomic(filepath, dati)
 
     def get_meta_giorno(self, spec_id: str, data_str: str) -> dict:
         spec = self.get_specializzando_by_id(spec_id)
@@ -171,13 +167,11 @@ class DataManagerLibretto:
         filepath = os.path.join(self.dir_libretti, f"{spec_id}.json")
         if not os.path.exists(filepath):
             return
-        with open(filepath, "r", encoding="utf-8") as f:
-            dati = json.load(f)
+        dati = read_json_object(filepath)
         if "meta_giorni" not in dati:
             dati["meta_giorni"] = {}
         dati["meta_giorni"][data_str] = meta_dict
-        with open(filepath, "w", encoding="utf-8") as f:
-            json.dump(dati, f, indent=4)
+        write_json_atomic(filepath, dati)
 
     def calcola_training_score(self, spec_id: str) -> tuple:
         """

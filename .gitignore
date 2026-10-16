@@ -18,5 +18,6 @@ tmp/
 *.lp
 *.mps
 .mmsd-planning.lock
+logs/
 .demo_backups/
 .demo-stage-*/

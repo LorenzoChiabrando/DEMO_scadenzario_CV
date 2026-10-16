@@ -1,5 +1,6 @@
 import calendar
 import datetime
+from contextlib import contextmanager
 from pathlib import Path
 
 from PySide6.QtWidgets import QDialog, QFileDialog
@@ -15,6 +16,7 @@ from src.calendar_presentation import (
 )
 from src.error_messages import describe_error
 from src.exports.calendar_pdf import CalendarPdfDocument, CalendarPdfRow, write_calendar_pdf
+from src.models.json_files import CorruptedDataError
 from src.roster_assignment import (
     GUARD_TYPE_ROLE,
     WARD_ROUND_ROLE,
@@ -238,7 +240,25 @@ class ControllerScadenzario:
             self.model.set_stato_mese(self.anno_corrente, self.mese_corrente, "CONVALIDATO")
             self.aggiorna_tabella()
 
+    @contextmanager
+    def _resta_sul_mese_se_danneggiato(self):
+        """Se il file del mese di arrivo è danneggiato, torna a mese e modalità di partenza.
+
+        L'errore viene rilanciato e lo mostra il gestore globale. Lo schermo resta
+        coerente perché ``aggiorna_tabella`` legge i dati prima di toccare la vista.
+        """
+        partenza = (self.anno_corrente, self.mese_corrente, self.modalita_corrente)
+        try:
+            yield
+        except CorruptedDataError:
+            self.anno_corrente, self.mese_corrente, self.modalita_corrente = partenza
+            raise
+
     def apri_calendario(self, modalita):
+        with self._resta_sul_mese_se_danneggiato():
+            self._apri_calendario(modalita)
+
+    def _apri_calendario(self, modalita):
         if modalita == "STORICO":
             max_history_date = self.get_max_history_date()
 
@@ -269,8 +289,9 @@ class ControllerScadenzario:
                 self.mese_corrente = self.real_mese + 1
 
         self.modalita_corrente = modalita
-        self.view.stacked_widget.setCurrentIndex(1)
+        # Prima il mese, poi il cambio pagina: con un file danneggiato si resta sulla dashboard.
         self.aggiorna_tabella()
+        self.view.stacked_widget.setCurrentIndex(1)
 
     def gestisci_navigazione(self):
         view_date = datetime.date(self.anno_corrente, self.mese_corrente, 1)
@@ -446,9 +467,11 @@ class ControllerScadenzario:
         )
 
     def aggiorna_tabella(self):
-        self.gestisci_navigazione()
-
+        # Prima i dati, poi la vista: se il file del mese è danneggiato lo schermo non cambia.
         stato_json = self.model.get_stato_mese(self.anno_corrente, self.mese_corrente)
+        roster = load_roster_month(self.model, self.anno_corrente, self.mese_corrente)
+
+        self.gestisci_navigazione()
         if self.modalita_corrente == "STORICO":
             self.view.btn_convalida.setVisible(False)
         elif self.modalita_corrente in ("PIANIFICAZIONE", "CORRENTE"):
@@ -458,13 +481,14 @@ class ControllerScadenzario:
         nome_mese = self.mesi_ita[self.mese_corrente - 1].upper()
         self.view.btn_mese_anno.setText(f"{nome_mese} {self.anno_corrente}")
 
-        self.roster = load_roster_month(self.model, self.anno_corrente, self.mese_corrente)
+        self.roster = roster
         modello = self.view.modello_attivita
         oggi = datetime.date.today()
-        modello.set_roster(self.roster, self.model.specializzandi)
+        specializzandi = self.model.specializzandi
+        modello.set_roster(self.roster, specializzandi)
         modello.set_today(oggi)
         self.view.modello_specializzandi.set_rows(
-            self.roster, resident_rows(self.roster, self.model.specializzandi)
+            self.roster, resident_rows(self.roster, specializzandi)
         )
         self.view.modello_specializzandi.set_today(oggi)
 
@@ -555,22 +579,28 @@ class ControllerScadenzario:
         self.aggiorna_tabella()
 
     def mese_precedente(self):
-        if self.mese_corrente == 1:
-            self.mese_corrente = 12
-            self.anno_corrente -= 1
-        else:
-            self.mese_corrente -= 1
-        self.aggiorna_tabella()
+        with self._resta_sul_mese_se_danneggiato():
+            if self.mese_corrente == 1:
+                self.mese_corrente = 12
+                self.anno_corrente -= 1
+            else:
+                self.mese_corrente -= 1
+            self.aggiorna_tabella()
 
     def mese_successivo(self):
-        if self.mese_corrente == 12:
-            self.mese_corrente = 1
-            self.anno_corrente += 1
-        else:
-            self.mese_corrente += 1
-        self.aggiorna_tabella()
+        with self._resta_sul_mese_se_danneggiato():
+            if self.mese_corrente == 12:
+                self.mese_corrente = 1
+                self.anno_corrente += 1
+            else:
+                self.mese_corrente += 1
+            self.aggiorna_tabella()
 
     def scegli_mese_anno(self):
+        with self._resta_sul_mese_se_danneggiato():
+            self._scegli_mese_anno()
+
+    def _scegli_mese_anno(self):
         dialog = DialogMeseAnno(self.mesi_ita, self.mese_corrente, self.anno_corrente, self.view)
         if not dialog.exec():
             return

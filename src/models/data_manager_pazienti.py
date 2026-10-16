@@ -1,13 +1,17 @@
 import os
 import json
+import logging
 from datetime import datetime
 
 from src.data_paths import resolve_data_directory
 from src.models.id_generator import next_available_id
+from src.models.json_files import CorruptedDataError, read_json_object, write_json_atomic
 from src.patient_fields import normalize_diagnosis
 from src.planning_schema import (
     DEFAULT_MAX_WAIT_DAYS, OPTIMIZATION_KEY, default_patient_optimization,
 )
+
+_LOGGER = logging.getLogger(__name__)
 
 
 def _diagnosis_fields(data: dict, existing: dict | None = None) -> tuple[str, str, str]:
@@ -41,12 +45,11 @@ class DataManagerPazienti:
         for filename in os.listdir(self.dir_pazienti):
             if filename.endswith(".json"):
                 filepath = os.path.join(self.dir_pazienti, filename)
-                with open(filepath, 'r', encoding='utf-8') as f:
-                    try:
-                        data = json.load(f)
-                        pazienti.append(data)
-                    except json.JSONDecodeError:
-                        pass 
+                try:
+                    pazienti.append(read_json_object(filepath))
+                except CorruptedDataError:
+                    # Una scheda rotta non deve nascondere tutte le altre.
+                    _LOGGER.warning("Scheda paziente danneggiata ignorata: %s", filename)
         
         return sorted(pazienti, key=lambda x: x.get('cognome', ''))
 
@@ -118,16 +121,14 @@ class DataManagerPazienti:
     def get_paziente_by_id(self, paziente_id):
         filepath = os.path.join(self.dir_pazienti, f"{paziente_id}.json")
         if os.path.exists(filepath):
-            with open(filepath, 'r', encoding='utf-8') as f:
-                return json.load(f)
+            return read_json_object(filepath)
         return None
 
     def aggiorna_paziente(self, paz_id, dati):
         filepath = os.path.join(self.dir_pazienti, f"{paz_id}.json")
         if not os.path.exists(filepath):
             return None
-        with open(filepath, 'r', encoding='utf-8') as f:
-            paz = json.load(f)
+        paz = read_json_object(filepath)
         interventi = dati.get("interventi", paz.get("interventi", []))
         primo = interventi[0] if interventi else {}
         durata_tot = sum(i.get("durata", 0) for i in interventi) or dati.get("durata_intervento", paz.get("durata_intervento", 90))
@@ -161,19 +162,16 @@ class DataManagerPazienti:
                 == DEFAULT_MAX_WAIT_DAYS.get(previous_urgency)
             ):
                 configuration["attesa_massima_giorni"] = DEFAULT_MAX_WAIT_DAYS.get(paz["urgenza"])
-        with open(filepath, 'w', encoding='utf-8') as f:
-            json.dump(paz, f, indent=4)
+        write_json_atomic(filepath, paz)
         return paz
 
     def aggiorna_stato_paziente(self, paz_id: str, stato: str):
         filepath = os.path.join(self.dir_pazienti, f"{paz_id}.json")
         if not os.path.exists(filepath):
             return
-        with open(filepath, "r", encoding="utf-8") as f:
-            paz = json.load(f)
+        paz = read_json_object(filepath)
         paz["stato"] = stato
-        with open(filepath, "w", encoding="utf-8") as f:
-            json.dump(paz, f, indent=4)
+        write_json_atomic(filepath, paz)
 
     def elimina_paziente(self, paz_id):
         filepath = os.path.join(self.dir_pazienti, f"{paz_id}.json")

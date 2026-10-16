@@ -6,6 +6,7 @@
      libretto         #4338ca
      scadenzario      #4338ca
      sale_operatorie  #6f42c1
+     generale         #334155 (messaggi fuori sezione)
      tono "avviso"    #d97706 (vince sulla sezione)
      tono "errore"    #b91c1c (vince sulla sezione)
    Le icone usano il search path Qt "icons:"
@@ -211,6 +212,19 @@ QDialog[sezione="sale_operatorie"] QComboBox#ComboDialog:focus,
 QDialog[sezione="sale_operatorie"] QTextEdit#NoteDialog:focus { border-color: #6f42c1; }
 QDialog[sezione="sale_operatorie"] QPushButton#BtnOpzioneDialog:hover {
     background-color: #ede9fe; border-color: #6f42c1; color: #6f42c1;
+}
+
+/* ── Generale (errori di avvio e imprevisti) ── */
+QDialog[sezione="generale"] QFrame#AccentBarDialog,
+QDialog[sezione="generale"] QPushButton#BtnSalvaDialog { background-color: #334155; }
+QDialog[sezione="generale"] QPushButton#BtnSalvaDialog:hover { background-color: #1e293b; }
+QDialog[sezione="generale"] QLabel#TitoloDialog { color: #334155; }
+QDialog[sezione="generale"] QLineEdit#InputDialog:focus,
+QDialog[sezione="generale"] QAbstractSpinBox#InputDialog:focus,
+QDialog[sezione="generale"] QComboBox#ComboDialog:focus,
+QDialog[sezione="generale"] QTextEdit#NoteDialog:focus { border-color: #334155; }
+QDialog[sezione="generale"] QPushButton#BtnOpzioneDialog:hover {
+    background-color: #f1f5f9; border-color: #334155; color: #334155;
 }
 
 /* ── Toni avviso/errore: dopo le sezioni, quindi prevalgono ── */

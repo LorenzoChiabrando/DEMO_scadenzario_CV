@@ -207,6 +207,20 @@ un'anteprima; `--write` sostituisce `mock_data` e sposta i dati precedenti in
 l'applicazione, conservare a parte la cartella `mock_data` corrente e rimettere il backup
 al suo posto. Il reset è un comando manuale e non viene eseguito all'avvio dell'applicazione.
 
+## Salvataggi, file danneggiati e log
+
+- I file JSON si salvano su un file temporaneo che sostituisce l'originale solo a scrittura
+  completata: un salvataggio interrotto lascia intatta la versione precedente.
+- Un file danneggiato non viene mai letto come vuoto, quindi non viene sovrascritto. Se è il
+  mese corrente dello scadenzario o delle sale operatorie, l'avvio si ferma con un messaggio
+  che indica il file; se è un altro mese, lo scadenzario resta sul mese di partenza. Libretti e
+  schede paziente danneggiati vengono saltati e segnalati nel log.
+- Gli errori imprevisti compaiono in un dialog e vengono registrati in `logs/mmsd-cv.log`
+  (a rotazione, 1 MB per 3 file, esclusa da Git). Il log contiene traceback e nomi dei file,
+  non il contenuto dei dati.
+- Per recuperare un file danneggiato: rimettere la copia da `.demo_backups/` oppure rigenerare i
+  dati con `reset_demo_data.py --write` (vedi sopra).
+
 ## Ottimizzazione Pyomo + HiGHS
 
 Il repository include ora un layer indipendente dalla GUI che implementa il MILP settimanale

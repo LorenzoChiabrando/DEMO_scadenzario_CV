@@ -18,8 +18,12 @@ from PySide6.QtWidgets import (
 
 from src.data_paths import PROJECT_ROOT
 
-SECTIONS = ("pazienti", "libretto", "scadenzario", "sale_operatorie")
-"""Sezioni dell'app: ognuna ha il proprio colore di accento in ``dialog.qss``."""
+SECTIONS = ("pazienti", "libretto", "scadenzario", "sale_operatorie", "generale")
+"""Sezioni dell'app: ognuna ha il proprio colore di accento in ``dialog.qss``.
+
+``generale`` (grigio neutro) è per i messaggi che non appartengono a una sezione,
+come gli errori di avvio o quelli imprevisti.
+"""
 
 TONES = ("normale", "avviso", "errore")
 """``avviso`` (ambra) ed ``errore`` (rosso) sostituiscono il colore della sezione."""
