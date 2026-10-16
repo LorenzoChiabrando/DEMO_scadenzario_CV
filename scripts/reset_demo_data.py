@@ -57,8 +57,36 @@ DEMO_PATIENT_NAMES = (
 )
 
 
+ROTATION_ROLES = (
+    "Reparto I",
+    "Reparto II",
+    "Sala Op. I",
+    "Sala Op. II",
+    "Giro Visite",
+    "Day Hospital",
+    "Day Surgery",
+)
+"""Ruoli coperti a rotazione: 7 ruoli e 8 specializzandi, quindi uno libero a settimana."""
+
+_ROTATION_ORIGIN = date(2024, 1, 1)
+"""Lunedì da cui si contano le settimane della rotazione."""
+
+
 def _monday(day: date) -> date:
     return day - timedelta(days=day.weekday())
+
+
+def _weekly_roles(monday: date, names: list[str]) -> dict[str, str]:
+    """Assegnazioni della settimana: ogni settimana tutti scalano di un ruolo.
+
+    La settimana si conta da un lunedì fisso, così la rotazione prosegue tra mesi e anni
+    e una settimana a cavallo di due mesi ha gli stessi turni in entrambi i file.
+    """
+    week = (monday - _ROTATION_ORIGIN).days // 7
+    return {
+        role: names[(position + week) % len(names)]
+        for position, role in enumerate(ROTATION_ROLES)
+    }
 
 
 def build_demo_snapshot(reference: date) -> dict[str, str]:
@@ -105,18 +133,14 @@ def build_demo_snapshot(reference: date) -> dict[str, str]:
             if day.weekday() >= 5:
                 continue
             monday = _monday(day)
+            weekly = _weekly_roles(monday, names)
             roster["turni"][day.isoformat()] = {
                 "Tipo Guardia": ("118", "PI", "L")[day.weekday() % 3],
-                "Reparto I": names[2],
-                "Reparto II": names[3],
-                "Sala Op. I": names[0],
-                "Sala Op. II": names[1],
-                "Day Hospital": names[5],
-                "Day Surgery": names[6],
+                **{role: weekly[role] for role in ROTATION_ROLES if role != "Giro Visite"},
             }
-            roster["giro_visite"][monday.isoformat()] = names[4]
+            roster["giro_visite"][monday.isoformat()] = weekly["Giro Visite"]
             room["turni"][day.isoformat()] = {
-                "specializzandi": {"OR I": names[0], "OR II": names[1]},
+                "specializzandi": {"OR I": weekly["Sala Op. I"], "OR II": weekly["Sala Op. II"]},
                 "operazioni": [],
             }
         rosters[key] = roster
@@ -167,7 +191,9 @@ def build_demo_snapshot(reference: date) -> dict[str, str]:
         if index > len(operation_days):
             continue
         day = operation_days[index - 1]
-        resident = residents[0]
+        # L'intervento va a chi è in Sala Op. I quel giorno secondo lo scadenzario.
+        surgeon_label = _weekly_roles(_monday(day), names)["Sala Op. I"]
+        resident = residents[names.index(surgeon_label)]
         operation = {
             "id_paziente": patient["id"],
             "nome_paziente": f"{patient['cognome']} {patient['nome']}",
@@ -184,7 +210,7 @@ def build_demo_snapshot(reference: date) -> dict[str, str]:
             "chirurgo": "Chirurgo demo",
             "complessita": patient["complessita"],
             "tipo_chirurgia": patient["tipo_chirurgia"],
-            "specializzando": names[0],
+            "specializzando": surgeon_label,
             "id_specializzando": resident["id"],
             "ruolo_specializzando": "OR I",
         }
@@ -203,7 +229,8 @@ def build_demo_snapshot(reference: date) -> dict[str, str]:
                 }
             )
 
-    residents[4]["attivita_extra"] = [
+    ward_round_label = _weekly_roles(last_week, names)["Giro Visite"]
+    residents[names.index(ward_round_label)]["attivita_extra"] = [
         {
             "data": (last_week + timedelta(days=offset)).isoformat(),
             "ora_inizio": "08:00",

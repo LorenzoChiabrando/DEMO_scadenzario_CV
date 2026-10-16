@@ -9,7 +9,7 @@
     "attivita": [],
     "attivita_extra": [
         {
-            "data": "2026-08-31",
+            "data": "2026-10-05",
             "ora_inizio": "08:00",
             "ora_fine": "18:00",
             "sede": "Reparto",
@@ -18,7 +18,7 @@
             "note": "Attività demo."
         },
         {
-            "data": "2026-09-01",
+            "data": "2026-10-06",
             "ora_inizio": "08:00",
             "ora_fine": "18:00",
             "sede": "Reparto",
@@ -27,7 +27,7 @@
             "note": "Attività demo."
         },
         {
-            "data": "2026-09-02",
+            "data": "2026-10-07",
             "ora_inizio": "08:00",
             "ora_fine": "18:00",
             "sede": "Reparto",
@@ -36,7 +36,7 @@
             "note": "Attività demo."
         },
         {
-            "data": "2026-09-03",
+            "data": "2026-10-08",
             "ora_inizio": "08:00",
             "ora_fine": "18:00",
             "sede": "Reparto",
@@ -45,7 +45,7 @@
             "note": "Attività demo."
         },
         {
-            "data": "2026-09-04",
+            "data": "2026-10-09",
             "ora_inizio": "08:00",
             "ora_fine": "18:00",
             "sede": "Reparto",

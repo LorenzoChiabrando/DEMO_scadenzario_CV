@@ -189,6 +189,13 @@ completate nella settimana precedente, operazioni pianificate vicine alla data d
 e pazienti in attesa. Gli scadenzari corrente e futuro sono in bozza, così possono essere
 modificati e poi convalidati prima di usare il planner.
 
+I turni ruotano ogni settimana: sette ruoli (Reparto I e II, Sala Op. I e II, Giro Visite,
+Day Hospital, Day Surgery) per otto specializzandi, quindi ogni settimana tutti scalano di un
+ruolo e uno resta libero. Le settimane si contano da un lunedì fisso, così la rotazione
+prosegue tra mesi e anni. Sale operatorie, interventi e libretti seguono gli stessi turni:
+OR I e OR II sono Sala Op. I e II del giorno e gli interventi completati compaiono nel
+libretto di chi era in sala.
+
 Le anagrafiche sintetiche riprendono i nomi della demo precedente, fra cui Pippo VerdeScuro,
 Mandringo Bello, Spirulina Alga e BAZZ JAZZ. Pino Silvestre completa il posto mancante
 nell'anagrafica degli specializzandi. Questi nomi sono inclusi nel generatore, così un nuovo
@@ -200,6 +207,10 @@ A programma chiuso, dalla radice del progetto:
 venv/bin/python3 scripts/reset_demo_data.py --reference-date 2026-09-08
 venv/bin/python3 scripts/reset_demo_data.py --reference-date 2026-09-08 --write
 ```
+
+L'applicazione usa la data reale per il mese corrente e per la pianificazione, quindi i dati
+vanno rigenerati a ridosso della demo, con quel giorno come data di riferimento (ad esempio
+il giorno prima dell'esame).
 
 Senza `--reference-date`, lo script usa la data odierna. La prima riga mostra soltanto
 un'anteprima; `--write` sostituisce `mock_data` e sposta i dati precedenti in

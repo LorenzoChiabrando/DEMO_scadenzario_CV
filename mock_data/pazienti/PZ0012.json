@@ -19,22 +19,12 @@
     "complessita": "Alta",
     "urgenza": "Alta",
     "stato": "In Attesa",
-    "data_inserimento": "05/08/2026",
+    "data_inserimento": "09/09/2026",
     "note": "Dati inventati per la demo.",
     "dati_sintetici": true,
     "modello_ottimizzazione": {
         "versione_schema": 1,
         "categoria_paper": "I'",
-        "attesa_massima_giorni": 30,
-        "specializzandi_abilitati": [
-            "SP001",
-            "SP002",
-            "SP003",
-            "SP004",
-            "SP005",
-            "SP006",
-            "SP007",
-            "SP008"
-        ]
+        "attesa_massima_giorni": 30
     }
 }

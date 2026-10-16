@@ -89,4 +89,13 @@ def test_synthetic_week_capacity_roster_and_objective_at_larger_sizes(
         data.efficiency_scale * result.objective.treatment_efficiency
         + result.objective.fairness_floor - result.objective.unassigned_count
     )
-    assert reconstructed == pytest.approx(result.objective.weighted_total, abs=1e-6)
+    if result.status is SolveStatus.OPTIMAL:
+        assert reconstructed == pytest.approx(result.objective.weighted_total, abs=1e-6)
+    else:
+        # R5 (vedi test_release_incumbents): al limite di tempo il totale dichiarato usa Z_f
+        # del solver, che può restare sotto il carico minimo reale riportato in fairness_floor.
+        solver_floor = pyo.value(built.model.fairness_floor)
+        assert result.objective.fairness_floor >= solver_floor - 1e-6
+        assert result.objective.weighted_total == pytest.approx(
+            reconstructed - (result.objective.fairness_floor - solver_floor), abs=1e-6
+        )

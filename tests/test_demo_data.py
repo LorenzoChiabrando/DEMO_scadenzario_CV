@@ -125,3 +125,90 @@ def test_refreshed_demo_can_be_planned_after_roster_confirmation(tmp_path: Path)
     assert len(run.result.schedule) == 13
     assert run.context.excluded_other_draft_count == 2
     assert run.write_receipt is None
+
+
+_DAILY_ROLES = (
+    "Reparto I",
+    "Reparto II",
+    "Sala Op. I",
+    "Sala Op. II",
+    "Day Hospital",
+    "Day Surgery",
+)
+_ROTATION_REFERENCE = date(2026, 10, 16)
+
+
+def _snapshot(reference: date) -> dict[str, dict]:
+    files = build_demo_snapshot(reference)
+    return {path: json.loads(text) for path, text in files.items() if path.endswith(".json")}
+
+
+def _weekly_roster(month: dict) -> dict[date, dict[str, str]]:
+    """Assegnazioni per settimana (lunedì -> ruolo -> sigla), uguali in tutti i giorni."""
+
+    weeks: dict[date, dict[str, str]] = {}
+    for day_string, daily in month["turni"].items():
+        day = date.fromisoformat(day_string)
+        monday = day - timedelta(days=day.weekday())
+        roles = {role: daily[role] for role in _DAILY_ROLES}
+        roles["Giro Visite"] = month["giro_visite"][monday.isoformat()]
+        assert weeks.setdefault(monday, roles) == roles, f"turni diversi nella settimana {monday}"
+    return weeks
+
+
+def test_roster_rotates_every_resident_through_several_roles() -> None:
+    month = _snapshot(_ROTATION_REFERENCE)["scadenzario/2026-10.json"]
+    weeks = [roles for _monday, roles in sorted(_weekly_roster(month).items())]
+
+    for previous, following in zip(weeks, weeks[1:], strict=False):
+        assert all(previous[role] != following[role] for role in previous)
+    roles_by_resident: dict[str, set[str]] = {}
+    for roles in weeks:
+        for role, label in roles.items():
+            roles_by_resident.setdefault(label, set()).add(role)
+    assert len(roles_by_resident) == len(DEMO_RESIDENT_NAMES)
+    assert all(len(roles) >= 3 for roles in roles_by_resident.values())
+
+
+def test_a_week_across_two_months_has_the_same_roster_in_both_files() -> None:
+    files = _snapshot(_ROTATION_REFERENCE)
+    september = _weekly_roster(files["scadenzario/2026-09.json"])
+    october = _weekly_roster(files["scadenzario/2026-10.json"])
+
+    assert september[date(2026, 9, 28)] == october[date(2026, 9, 28)]
+
+
+@pytest.mark.parametrize("reference", [_ROTATION_REFERENCE, date(2026, 9, 8), date(2027, 1, 1)])
+def test_operating_rooms_and_operations_follow_the_roster(reference: date) -> None:
+    files = _snapshot(reference)
+    residents = {
+        f"{record['cognome']} {record['nome'][0]}.": record["id"]
+        for path, record in files.items()
+        if path.startswith("libretti/")
+    }
+    for path, month in files.items():
+        if not path.startswith("sale_operatorie/"):
+            continue
+        roster = files[path.replace("sale_operatorie/", "scadenzario/")]
+        for day_string, daily in month["turni"].items():
+            shift = roster["turni"][day_string]
+            assert daily["specializzandi"] == {
+                "OR I": shift["Sala Op. I"],
+                "OR II": shift["Sala Op. II"],
+            }
+            for operation in daily["operazioni"]:
+                assert operation["specializzando"] == shift["Sala Op. I"]
+                assert operation["id_specializzando"] == residents[shift["Sala Op. I"]]
+
+
+def test_ward_round_extra_activities_belong_to_last_weeks_ward_round_resident() -> None:
+    files = _snapshot(_ROTATION_REFERENCE)
+    last_week = date(2026, 10, 5)
+    on_ward_round = files["scadenzario/2026-10.json"]["giro_visite"][last_week.isoformat()]
+
+    with_extra = [
+        f"{record['cognome']} {record['nome'][0]}."
+        for path, record in files.items()
+        if path.startswith("libretti/") and record["attivita_extra"]
+    ]
+    assert with_extra == [on_ward_round]
