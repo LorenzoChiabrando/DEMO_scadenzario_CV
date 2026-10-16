@@ -16,6 +16,7 @@ from src.data_paths import resolve_data_directory
 from src.models.patient_plan_state import (
     draft_patient_ids_by_week,
     patient_status_updates,
+    read_operational_plan_months,
 )
 from src.planning_schema import OPTIMIZATION_KEY, SCHEMA_VERSION
 
@@ -52,7 +53,11 @@ def load_platform_context(
     *,
     data_directory: str | Path | None = None,
 ) -> PlatformPlanningContext:
-    """Load and map the requested platform week."""
+    """Map planned rosters, excluding reservations from the operational OR view.
+
+    Initialized actual weeks supersede their planned copies for reservations;
+    they never replace the planned roster used as solver input.
+    """
     root = resolve_data_directory(data_directory, project_root=project_root)
     active_policy = policy or PlatformPlanningPolicy()
     if monday.weekday() != 0:
@@ -97,15 +102,18 @@ def load_platform_context(
             )
         roster_by_day[day] = tuple(assignments)
 
-    other_draft_patient_ids = _collect_other_draft_patient_ids(
-        root / "sale_operatorie",
-        excluded_monday=monday,
-    )
-    sale_months = {
-        path.stem: _read_json(path)
-        for path in sorted((root / "sale_operatorie").glob("????-??.json"))
+    try:
+        sale_months = read_operational_plan_months(root / "sale_operatorie")
+        reservations = draft_patient_ids_by_week(sale_months)
+    except (OSError, ValueError, TypeError) as exc:
+        raise PlatformDataError("cannot read operating-room reservations") from exc
+    other_draft_patient_ids = {
+        patient_id
+        for week, identifiers in reservations.items()
+        if week != monday
+        for patient_id in identifiers
     }
-    current_draft_patient_ids = draft_patient_ids_by_week(sale_months).get(monday, set())
+    current_draft_patient_ids = reservations.get(monday, set())
     return build_platform_context(
         monday=monday,
         patient_records=patient_records,
@@ -368,42 +376,6 @@ def _build_resident_name_index(
 
 def _normalize_display_name(value: str) -> str:
     return " ".join(value.split()).casefold()
-
-
-def _collect_other_draft_patient_ids(
-    sale_directory: Path,
-    *,
-    excluded_monday: date,
-) -> set[str]:
-    month_data: dict[tuple[int, int], JsonObject] = {}
-    for path in sorted(sale_directory.glob("????-??.json")):
-        try:
-            year, month = map(int, path.stem.split("-"))
-        except ValueError:
-            continue
-        month_data[year, month] = _read_json(path)
-
-    planned: set[str] = set()
-    for data in month_data.values():
-        for day_text, daily in data.get("turni", {}).items():
-            try:
-                day = date.fromisoformat(day_text)
-            except ValueError:
-                continue
-            monday = day - timedelta(days=day.weekday())
-            if monday == excluded_monday:
-                continue
-            canonical = month_data.get((monday.year, monday.month), {})
-            state = (
-                canonical.get("metadata", {}).get("settimane", {}).get(monday.isoformat(), "BOZZA")
-            )
-            if state == "CONVALIDATO":
-                continue
-            for operation in daily.get("operazioni", []):
-                patient_id = operation.get("id_paziente")
-                if isinstance(patient_id, str) and patient_id:
-                    planned.add(patient_id)
-    return planned
 
 
 @contextmanager

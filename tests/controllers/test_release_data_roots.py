@@ -9,6 +9,7 @@ from PySide6.QtWidgets import QApplication
 
 from main import MainWindow
 from scripts.verify_synthetic_planning import build_synthetic_catalog
+from src import data_paths
 from src.models.data_manager import DataManager
 from src.models.data_manager_libretto import DataManagerLibretto
 from src.models.data_manager_pazienti import DataManagerPazienti
@@ -21,6 +22,7 @@ def test_launching_from_another_directory_should_keep_one_data_root(
 ) -> None:
     app = QApplication.instance() or QApplication([])
     monkeypatch.delenv("MMSD_DATA_DIR", raising=False)
+    monkeypatch.setattr(data_paths, "PROJECT_ROOT", tmp_path / "project")
     monkeypatch.chdir(tmp_path)
     window = MainWindow()
     try:

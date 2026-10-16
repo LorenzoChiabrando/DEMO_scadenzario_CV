@@ -707,7 +707,7 @@ class ViewLibretto(QWidget):
         return card
 
     def _crea_card_or_pianificata(self, att: dict, saved: dict, on_save) -> QFrame:
-        """Card for a pianificata OR day: read-only slot details + editable Note."""
+        """Read-only pending operations; confirmation belongs to the actual OR week."""
         _slot_fmt = {
             "8.00-10.00":  "08:00 – 10:00",
             "10.00-12.00": "10:00 – 12:00",
@@ -749,7 +749,7 @@ class ViewLibretto(QWidget):
         lbl_tipo = QLabel("Intervento Chirurgico")
         lbl_tipo.setStyleSheet("font-size:15px; font-weight:bold; color:#1e293b; border:none; background:transparent;")
         hdr.addWidget(lbl_tipo, stretch=1)
-        stato_txt = "Confermata" if saved else "Da confermare"
+        stato_txt = "In attesa di convalida Effettivo"
         badge_stato = QLabel(stato_txt)
         badge_stato.setStyleSheet(
             ("background:#f0fdf4; color:#15803d; font-weight:bold; font-size:11px; "
@@ -834,7 +834,7 @@ class ViewLibretto(QWidget):
 
         inp_note = QLineEdit(saved.get("note", att.get("note", "")))
         inp_note.setPlaceholderText("Note aggiuntive...")
-        inp_note.setEnabled(not bool(saved))
+        inp_note.setReadOnly(True)
         inp_note.setStyleSheet(
             "QLineEdit { background:#ffffff; border:1.5px solid #93c5fd; "
             "border-radius:8px; padding:0 10px; font-size:14px; color:#1e293b; "
@@ -844,41 +844,15 @@ class ViewLibretto(QWidget):
         )
         vl.addWidget(inp_note)
 
-        save_row = QHBoxLayout()
-        save_row.addStretch()
-        btn_salva = QPushButton("Conferma" if not saved else "✔ Confermata")
-        btn_salva.setFixedHeight(36)
-        btn_salva.setMinimumWidth(120)
-        btn_salva.setCursor(Qt.CursorShape.PointingHandCursor)
-        btn_salva.setEnabled(not bool(saved))
-        btn_salva.setStyleSheet(
-            "QPushButton { background:#2563eb; color:#fff; font-weight:bold; "
-            "font-size:13px; border:none; border-radius:8px; padding:0 16px; }"
-            "QPushButton:hover { background:#1d4ed8; }"
-            "QPushButton:disabled { background:#e2e8f0; color:#94a3b8; }"
+        confirmation_info = QLabel(
+            "Gli interventi saranno registrati dopo la convalida dell'Effettivo "
+            "nelle Sale Operatorie."
         )
-        save_row.addWidget(btn_salva)
-        vl.addLayout(save_row)
-
-        def _do_save():
-            on_save({
-                "data":     att["data"],
-                "sede":     att["sede"],
-                "attivita": att["attivita"],
-                "ruolo":    att.get("ruolo", ""),
-                "note":     inp_note.text().strip(),
-                "tipo":     "extra",
-            })
-            badge_stato.setText("Confermata")
-            badge_stato.setStyleSheet(
-                "background:#f0fdf4; color:#15803d; font-weight:bold; font-size:11px; "
-                "padding:2px 10px; border-radius:8px; border:1px solid #86efac;"
-            )
-            btn_salva.setText("✔ Confermata")
-            btn_salva.setEnabled(False)
-            inp_note.setEnabled(False)
-
-        btn_salva.clicked.connect(_do_save)
+        confirmation_info.setWordWrap(True)
+        confirmation_info.setStyleSheet(
+            "font-size:13px; color:#475569; border:none; background:transparent;"
+        )
+        vl.addWidget(confirmation_info)
         return card
 
     def _crea_card_extra_semplice(self, att: dict, saved: dict, on_save) -> QFrame:

@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import os
 from collections.abc import Mapping
+from copy import deepcopy
 from datetime import date, timedelta
 from pathlib import Path
 from typing import Any
@@ -21,21 +22,65 @@ def read_plan_months(directory: Path) -> dict[str, JsonObject]:
     }
 
 
+def read_operational_plan_months(
+    sale_directory: str | Path,
+    replacements: Mapping[Path, JsonObject] | None = None,
+) -> dict[str, JsonObject]:
+    """Overlay initialized actual weeks on planned months without any writes.
+
+    ``sale_directory`` is the original base directory. Replacement keys are
+    monthly paths in that directory or its ``effettivo`` child. A week is
+    initialized only by its entry in the Monday month's ``metadata.settimane``.
+    Empty actual days therefore hide the original planned assignments as well.
+    """
+    base = Path(sale_directory).resolve()
+    planned = read_plan_months(base)
+    actual = read_plan_months(base / "effettivo")
+    for path, replacement in (replacements or {}).items():
+        path = Path(path).resolve()
+        target = actual if path.parent == base / "effettivo" else planned
+        if path.parent not in {base, base / "effettivo"}:
+            continue
+        target[path.stem] = deepcopy(replacement)
+    result = deepcopy(planned)
+    for month_key, month in sorted(actual.items()):
+        for monday_text, state in month.get("metadata", {}).get("settimane", {}).items():
+            monday = date.fromisoformat(monday_text)
+            if monday.weekday() != 0 or monday.strftime("%Y-%m") != month_key:
+                continue
+            canonical = result.setdefault(month_key, {"metadata": {}, "turni": {}})
+            canonical.setdefault("metadata", {}).setdefault("settimane", {})[monday_text] = state
+            for offset in range(5):
+                day = monday + timedelta(days=offset)
+                key = day.strftime("%Y-%m")
+                day_text = day.isoformat()
+                target = result.setdefault(key, {"metadata": {}, "turni": {}})
+                daily = actual.get(key, {}).get("turni", {}).get(day_text)
+                if daily is None:
+                    target.setdefault("turni", {}).pop(day_text, None)
+                else:
+                    target.setdefault("turni", {})[day_text] = deepcopy(daily)
+    return result
+
+
 def _daily_patient_ids(daily: JsonObject) -> set[str]:
     operations = list(daily.get("operazioni", []))
     operations.extend(
-        value for key, value in daily.items()
+        value
+        for key, value in daily.items()
         if key not in {"operazioni", "specializzandi"} and isinstance(value, dict)
     )
     return {
-        operation["id_paziente"] for operation in operations
+        operation["id_paziente"]
+        for operation in operations
         if isinstance(operation.get("id_paziente"), str) and operation["id_paziente"]
     }
 
 
 def _monthly_patient_ids(month: JsonObject) -> set[str]:
     return {
-        patient_id for daily in month.get("turni", {}).values()
+        patient_id
+        for daily in month.get("turni", {}).values()
         for patient_id in _daily_patient_ids(daily)
     }
 
@@ -51,8 +96,8 @@ def draft_patient_ids_by_week(months: Mapping[str, JsonObject]) -> dict[date, se
                 continue
             monday = day - timedelta(days=day.weekday())
             canonical = months.get(monday.strftime("%Y-%m"), {})
-            week_state = canonical.get("metadata", {}).get("settimane", {}).get(
-                monday.isoformat(), "BOZZA"
+            week_state = (
+                canonical.get("metadata", {}).get("settimane", {}).get(monday.isoformat(), "BOZZA")
             )
             if week_state != "CONVALIDATO":
                 reservations.setdefault(monday, set()).update(_daily_patient_ids(daily))
@@ -71,12 +116,13 @@ def patient_status_updates(
     returns a planned patient to the waiting list; retained confirmed operations
     are left to the existing week-confirmation flow.
     """
-    months = read_plan_months(sale_directory)
+    previous = read_operational_plan_months(sale_directory)
+    months = read_operational_plan_months(sale_directory, replacements)
     affected: set[str] = set()
-    for path, replacement in replacements.items():
-        affected.update(_monthly_patient_ids(months.get(path.stem, {})))
-        affected.update(_monthly_patient_ids(replacement))
-        months[path.stem] = replacement
+    for key in previous.keys() | months.keys():
+        if previous.get(key) != months.get(key):
+            affected.update(_monthly_patient_ids(previous.get(key, {})))
+            affected.update(_monthly_patient_ids(months.get(key, {})))
     if not affected:
         return {}
     drafts = draft_patient_ids_by_week(months)
@@ -114,6 +160,7 @@ def write_json_batch(updates: Mapping[Path, JsonObject]) -> None:
     try:
         for path, payload in updates.items():
             serialized = json.dumps(payload, indent=4).encode("utf-8")
+            path.parent.mkdir(parents=True, exist_ok=True)
             temporary_paths[path] = _stage_bytes(path, serialized)
         for path, temporary in temporary_paths.items():
             os.replace(temporary, path)

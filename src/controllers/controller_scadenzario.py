@@ -1,9 +1,17 @@
+from __future__ import annotations
+
 import calendar
 import datetime
 from pathlib import Path
 
-from PySide6.QtWidgets import QFileDialog, QInputDialog, QMessageBox, QTableWidget
-from PySide6.QtCore import Qt
+from PySide6.QtWidgets import (
+    QAbstractItemDelegate,
+    QComboBox,
+    QFileDialog,
+    QInputDialog,
+    QMessageBox,
+    QTableWidget,
+)
 
 from src.calendar_presentation import (
     month_dates,
@@ -13,10 +21,10 @@ from src.calendar_presentation import (
     resolve_resident_name,
     row_display_label,
 )
+from src.calendar_versions import CalendarVersion
 from src.exports.calendar_pdf import CalendarPdfDocument, CalendarPdfRow, write_calendar_pdf
 from src.views.components.combo_delegate import ComboBoxDelegate, SmartComboBoxDelegate
 from src.views.dialog_mese_anno import DialogMeseAnno
-
 
 _PDF_ROW_COLORS = {
     "Tipo Guardia": "#e0e7ff",
@@ -35,6 +43,8 @@ def build_scadenzario_pdf_document(
     dates: tuple[datetime.date, ...],
     row_keys: list[str],
     residents: list[dict],
+    *,
+    version: CalendarVersion = CalendarVersion.PREVISTO,
 ) -> CalendarPdfDocument:
     """Prepara i dati dello scadenziario per il PDF."""
 
@@ -83,7 +93,7 @@ def build_scadenzario_pdf_document(
     )
     legend = tuple(resident_legend(residents).items()) if compact else ()
     return CalendarPdfDocument(
-        title="Scadenziario mensile",
+        title=f"Scadenziario mensile · {CalendarVersion(version).value.capitalize()}",
         period=period,
         column_headers=columns,
         rows=tuple(rows),
@@ -136,8 +146,15 @@ def _duplicate_operating_room_assignments(data: dict, year: int, month: int) -> 
 class ControllerScadenzario:
     def __init__(self, view, model, model_sale_operatorie=None):
         self.view = view
-        self.model = model
-        self.model_sale_op = model_sale_operatorie
+        self.versione_corrente = CalendarVersion.PREVISTO
+        self._model_previsto = model.for_version(CalendarVersion.PREVISTO)
+        self._model_effettivo = model.for_version(CalendarVersion.EFFETTIVO)
+        self.model = self._model_previsto
+        self._model_sale_base = model_sale_operatorie
+        self.model_sale_op = (
+            model_sale_operatorie.for_version(self.versione_corrente)
+            if model_sale_operatorie is not None else None
+        )
         self.modalita_corrente = None
 
         self.mesi_ita = ["Gennaio", "Febbraio", "Marzo", "Aprile", "Maggio", "Giugno",
@@ -159,6 +176,8 @@ class ControllerScadenzario:
         self.view.btn_indietro.clicked.connect(self.torna_alla_dashboard)
 
         self.view.btn_convalida.clicked.connect(self.convalida_mese)
+        self.view.btn_crea_effettivo.clicked.connect(self.crea_effettivo_mese)
+        self.view.combo_versione.currentIndexChanged.connect(self.cambia_versione)
 
         self.view.btn_prev.clicked.connect(self.mese_precedente)
         self.view.btn_next.clicked.connect(self.mese_successivo)
@@ -176,13 +195,94 @@ class ControllerScadenzario:
 
         self.aggiorna_tabella()
 
+    def cambia_versione(self, _index: int) -> None:
+        """Switch bound managers without changing period, zoom or persisted data."""
+        version = CalendarVersion(self.view.combo_versione.currentData())
+        if version == self.versione_corrente:
+            return
+        # Discard an uncommitted editor before it can write into another version.
+        for editor in self.view.tabella.viewport().findChildren(QComboBox):
+            self.view.tabella.closeEditor(
+                editor, QAbstractItemDelegate.EndEditHint.RevertModelCache
+            )
+        self.versione_corrente = version
+        self.model = (
+            self._model_previsto if version == CalendarVersion.PREVISTO
+            else self._model_effettivo
+        )
+        if self._model_sale_base is not None:
+            self.model_sale_op = self._model_sale_base.for_version(version)
+        self.view.lbl_dettaglio_cella.setText("")
+        self.aggiorna_tabella()
+
+    def _effettivo_assente(self) -> bool:
+        return (
+            self.versione_corrente == CalendarVersion.EFFETTIVO
+            and not self.model.has_mese(self.anno_corrente, self.mese_corrente)
+        )
+
+    def _puo_modificare(self) -> bool:
+        if self._effettivo_assente():
+            return False
+        if self.model.get_stato_mese(self.anno_corrente, self.mese_corrente) == "CONVALIDATO":
+            return False
+        return not (
+            self.modalita_corrente == "STORICO"
+            and self.versione_corrente == CalendarVersion.PREVISTO
+        )
+
+    def _mesi_disponibili(self) -> list[tuple[int, int]]:
+        return sorted(set(self._model_previsto.get_mesi_disponibili())
+                      | set(self._model_effettivo.get_mesi_disponibili()))
+
+    def _conflitto_assegnazioni_interventi(self, data_str: str, riga: str, valore: str) -> bool:
+        """Reject ambiguous actual roster changes while operation assignments differ."""
+        room_id, role = {
+            "Sala Op. I": ("OR-1", "OR I"),
+            "Sala Op. II": ("OR-2", "OR II"),
+        }[riga]
+        for operation in self.model_sale_op.get_operazioni(data_str):
+            operation_room = operation.get("sala_operatoria")
+            if operation_room and operation_room != room_id:
+                continue
+            operation_role = operation.get("ruolo_specializzando")
+            if not operation_room and operation_role and operation_role != role:
+                continue
+            assigned = any(key in operation for key in (
+                "id_specializzando", "specializzando", "ruolo_specializzando",
+            ))
+            specialist = operation.get("specializzando", "").strip().casefold()
+            if assigned and specialist != valore.casefold():
+                return True
+        return False
+
+    def crea_effettivo_mese(self) -> None:
+        """Explicitly initialize a missing actual month from a confirmed planned month."""
+        if not self._effettivo_assente():
+            return
+        answer = QMessageBox.question(
+            self.view,
+            "Crea calendario Effettivo",
+            f"Creare l'Effettivo di {self.mese_corrente:02d}/{self.anno_corrente} "
+            "dal Previsto convalidato?\n\nLa copia sarà modificabile separatamente.",
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+            QMessageBox.StandardButton.No,
+        )
+        if answer != QMessageBox.StandardButton.Yes:
+            return
+        try:
+            self._model_previsto.crea_effettivo_mese(self.anno_corrente, self.mese_corrente)
+        except (OSError, ValueError) as error:
+            QMessageBox.warning(self.view, "Creazione Effettivo non riuscita", str(error))
+        self.aggiorna_tabella()
+
     def get_max_history_date(self):
         """
         Calcola dinamicamente fino a che mese si può spingere lo Storico.
         Se il mese corrente è già CONVALIDATO, rientra nello storico.
         Altrimenti, lo storico si ferma rigorosamente al mese precedente.
         """
-        if self.model.get_stato_mese(self.real_anno, self.real_mese) == "CONVALIDATO":
+        if self._model_previsto.get_stato_mese(self.real_anno, self.real_mese) == "CONVALIDATO":
             return datetime.date(self.real_anno, self.real_mese, 1)
         else:
             if self.real_mese == 1:
@@ -191,6 +291,8 @@ class ControllerScadenzario:
                 return datetime.date(self.real_anno, self.real_mese - 1, 1)
 
     def convalida_mese(self):
+        if not self._puo_modificare():
+            return
         month_data = self.model.load_mese(self.anno_corrente, self.mese_corrente)
         missing = _missing_operating_room_assignments(
             month_data,
@@ -204,7 +306,7 @@ class ControllerScadenzario:
                 preview += f"\n• ...e altri {remaining} giorni"
             QMessageBox.warning(
                 self.view,
-                "Scadenzario incompleto",
+                f"Scadenzario {self.versione_corrente.value.capitalize()} incompleto",
                 "Prima della convalida assegna Sala Op. I e Sala Op. II "
                 "a tutti i giorni lavorativi.\n\n" + preview,
             )
@@ -222,34 +324,51 @@ class ControllerScadenzario:
                 preview += f"\n• ...e altri {remaining} giorni"
             QMessageBox.warning(
                 self.view,
-                "Assegnazione sale non valida",
+                f"Assegnazione sale non valida · {self.versione_corrente.value.capitalize()}",
                 "Lo stesso specializzando non può coprire contemporaneamente "
                 "Sala Op. I e Sala Op. II.\n\n" + preview,
             )
             return
 
+        planned = self.versione_corrente == CalendarVersion.PREVISTO
+        explanation = (
+            "Il Previsto non sarà più modificabile. Verrà creata una copia Effettivo "
+            "modificabile separatamente."
+            if planned else
+            "L'Effettivo non sarà più modificabile. Le attività operatorie si "
+            "confermano separatamente nelle Sale Operatorie."
+        )
         risposta = QMessageBox.question(
             self.view,
-            "Conferma Convalida",
-            "Vuoi convalidare in via definitiva questo mese?\n\nUna volta convalidato, il mese passerà allo Storico e non sarà più modificabile.",
-            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No
+            f"Convalida {self.versione_corrente.value.capitalize()}",
+            f"Convalidare il mese {self.mese_corrente:02d}/{self.anno_corrente} "
+            f"{self.versione_corrente.value.capitalize()}?\n\n{explanation}",
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+            QMessageBox.StandardButton.No,
         )
 
         if risposta == QMessageBox.StandardButton.Yes:
-            self.model.set_stato_mese(self.anno_corrente, self.mese_corrente, "CONVALIDATO")
+            try:
+                self.model.convalida_mese(self.anno_corrente, self.mese_corrente)
+            except (OSError, ValueError) as error:
+                QMessageBox.warning(
+                    self.view,
+                    f"Convalida {self.versione_corrente.value.capitalize()} non riuscita",
+                    str(error),
+                )
             self.aggiorna_tabella()
 
     def apri_calendario(self, modalita):
         if modalita == "STORICO":
             max_history_date = self.get_max_history_date()
 
-            mesi_disp = self.model.get_mesi_disponibili()
+            mesi_disp = self._mesi_disponibili()
             storici_validi = [(a, m) for a, m in mesi_disp if datetime.date(a, m, 1) <= max_history_date]
 
             if not storici_validi:
                 QMessageBox.information(
                     self.view,
-                    "Nessuno storico",
+                    f"Nessuno storico · {self.versione_corrente.value.capitalize()}",
                     "Non sono presenti dati di mesi passati o convalidati salvati nel sistema."
                 )
                 return
@@ -299,7 +418,7 @@ class ControllerScadenzario:
             if view_date >= max_history_date:
                 self.view.btn_next.setVisible(False)
 
-            mesi_disp = self.model.get_mesi_disponibili()
+            mesi_disp = self._mesi_disponibili()
             storici_validi = [(a, m) for a, m in mesi_disp if datetime.date(a, m, 1) <= max_history_date]
 
             if storici_validi:
@@ -353,11 +472,14 @@ class ControllerScadenzario:
             day.strftime("%d/%m/%Y"),
             self.view.row_labels[row],
             full_name,
+            versione=self.versione_corrente.value,
         )
 
     def esporta_pdf(self) -> None:
         """Esporta il mese o una settimana in PDF."""
 
+        if self._effettivo_assente():
+            return
         weeks = month_weeks(self.anno_corrente, self.mese_corrente)
         choices = ["Mese intero"] + [
             f"Settimana {index}: {week[0].strftime('%d/%m')} - {week[-1].strftime('%d/%m')}"
@@ -365,7 +487,7 @@ class ControllerScadenzario:
         ]
         choice, accepted = QInputDialog.getItem(
             self.view,
-            "Esporta scadenzario",
+            f"Esporta scadenzario {self.versione_corrente.value.capitalize()}",
             "Intervallo da esportare:",
             choices,
             0,
@@ -381,10 +503,13 @@ class ControllerScadenzario:
             dates = weeks[week_index]
             scope = f"settimana-{week_index + 1}"
 
-        suggested = f"scadenzario-{self.anno_corrente:04d}-{self.mese_corrente:02d}-{scope}.pdf"
+        suggested = (
+            f"scadenzario-{self.versione_corrente.value}-"
+            f"{self.anno_corrente:04d}-{self.mese_corrente:02d}-{scope}.pdf"
+        )
         path, _ = QFileDialog.getSaveFileName(
             self.view,
-            "Salva calendario PDF",
+            f"Salva calendario {self.versione_corrente.value.capitalize()} PDF",
             str(Path.home() / suggested),
             "Documento PDF (*.pdf)",
         )
@@ -396,47 +521,67 @@ class ControllerScadenzario:
                 dates,
                 self.view.row_labels,
                 self.model.specializzandi,
+                version=self.versione_corrente,
             )
             output_path = write_calendar_pdf(path, document)
         except (OSError, ValueError, RuntimeError) as error:
             QMessageBox.critical(
                 self.view,
-                "Esportazione non riuscita",
+                f"Esportazione {self.versione_corrente.value.capitalize()} non riuscita",
                 f"Impossibile creare il PDF:\n{error}",
             )
             return
         QMessageBox.information(
             self.view,
-            "PDF creato",
+            f"PDF {self.versione_corrente.value.capitalize()} creato",
             f"Calendario esportato in:\n{output_path}",
         )
 
     def aggiorna_tabella(self):
         self.view.tabella.blockSignals(True)
 
+        self._model_previsto.invalidate_cache()
+        self._model_effettivo.invalidate_cache()
+        if self.model_sale_op is not None:
+            self.model_sale_op.invalidate_cache()
+
         self.gestisci_navigazione()
 
         stato_json = self.model.get_stato_mese(self.anno_corrente, self.mese_corrente)
-
-        if self.modalita_corrente == "STORICO":
-            self.view.tabella.setEditTriggers(QTableWidget.EditTrigger.NoEditTriggers)
-            self.view.btn_convalida.setVisible(False)
-
-        elif self.modalita_corrente == "PIANIFICAZIONE":
-            if stato_json == "CONVALIDATO":
-                self.view.tabella.setEditTriggers(QTableWidget.EditTrigger.NoEditTriggers)
-            else:
-                self.view.tabella.setEditTriggers(QTableWidget.EditTrigger.AllEditTriggers)
-            self.view.btn_convalida.setVisible(stato_json != "CONVALIDATO")
-
-        elif self.modalita_corrente == "CORRENTE":
-            if stato_json == "CONVALIDATO":
-                self.view.tabella.setEditTriggers(QTableWidget.EditTrigger.NoEditTriggers)
-            else:
-                self.view.tabella.setEditTriggers(QTableWidget.EditTrigger.AllEditTriggers)
-            self.view.btn_convalida.setVisible(stato_json != "CONVALIDATO")
-
-        self.view.aggiorna_badge_modalita(self.modalita_corrente, stato_json)
+        absent = self._effettivo_assente()
+        can_edit = self._puo_modificare()
+        self.view.tabella.setEditTriggers(
+            QTableWidget.EditTrigger.AllEditTriggers if can_edit
+            else QTableWidget.EditTrigger.NoEditTriggers
+        )
+        self.view.btn_convalida.setVisible(can_edit)
+        self.view.btn_convalida.setText(
+            f"CONVALIDA IL MESE {self.versione_corrente.value.upper()}"
+        )
+        self.view.btn_esporta_pdf.setEnabled(not absent)
+        can_create = absent and (
+            self._model_previsto.get_stato_mese(self.anno_corrente, self.mese_corrente)
+            == "CONVALIDATO"
+        )
+        self.view.btn_crea_effettivo.setVisible(can_create)
+        if absent:
+            message = (
+                "Effettivo non ancora creato. Puoi copiarlo dal Previsto convalidato."
+                if can_create else
+                "Effettivo non ancora creato. "
+                "Convalida il Previsto per creare la copia modificabile."
+            )
+        elif stato_json == "CONVALIDATO":
+            message = f"{self.versione_corrente.value.capitalize()} convalidato: sola lettura."
+        elif self.versione_corrente == CalendarVersion.EFFETTIVO:
+            message = "Le correzioni all'Effettivo non modificano il Previsto."
+        else:
+            message = "La convalida del Previsto crea una copia Effettivo modificabile."
+        self.view.lbl_versione_info.setText(message)
+        self.view.aggiorna_badge_modalita(
+            self.modalita_corrente, "ASSENTE" if absent else stato_json,
+            self.versione_corrente.value,
+        )
 
         nome_mese = self.mesi_ita[self.mese_corrente - 1].upper()
         self.view.btn_mese_anno.setText(f"{nome_mese} {self.anno_corrente}")
@@ -465,7 +610,9 @@ class ControllerScadenzario:
                 nome_riga = self.view.row_labels[riga]
                 if nome_riga == "Giro Visite":
                     continue
-                valore = "-" if is_festivo else self.model.get_valore_cella(data_str, nome_riga)
+                valore = "-" if is_festivo else (
+                    "" if absent else self.model.get_valore_cella(data_str, nome_riga)
+                )
                 self.view.tabella.setItem(riga, giorno - 1, self.view.crea_item_cella(valore, is_festivo, nome_riga, is_oggi))
 
         self._applica_giro_visite(num_giorni, oggi)
@@ -479,17 +626,16 @@ class ControllerScadenzario:
             day = datetime.date(self.anno_corrente, self.mese_corrente, column + 1)
             weekend = day.weekday() >= 5
             monday = day - datetime.timedelta(days=day.weekday())
-            value = "-" if weekend else self.model.get_giro_visite_settimana(
-                monday.isoformat(), day.year, day.month
+            value = "-" if weekend else (
+                "" if self._effettivo_assente() else self.model.get_giro_visite_settimana(
+                    monday.isoformat(), day.year, day.month
+                )
             )
             item = self.view.crea_item_cella(value, weekend, "Giro Visite", day == oggi)
             self.view.tabella.setItem(row, column, item)
 
     def salva_modifica_cella(self, riga, colonna):
-        if riga == 0 or self.modalita_corrente == "STORICO":
-            return
-
-        if self.model.get_stato_mese(self.anno_corrente, self.mese_corrente) == "CONVALIDATO":
+        if riga == 0 or not self._puo_modificare():
             return
 
         giorno = colonna + 1
@@ -516,7 +662,10 @@ class ControllerScadenzario:
             try:
                 self.model.valida_giro_visite_settimana(lun_str, nuovo_valore)
             except ValueError as error:
-                QMessageBox.warning(self.view, "Giro visite non modificabile", str(error))
+                QMessageBox.warning(
+                    self.view, f"Giro visite {self.versione_corrente.value} non modificabile",
+                    str(error),
+                )
                 self.aggiorna_tabella()
                 return
             if previous:
@@ -524,7 +673,7 @@ class ControllerScadenzario:
                 action = "Sostituire l'assegnazione" if nuovo_valore else "Rimuovere l'assegnazione"
                 answer = QMessageBox.question(
                     self.view,
-                    "Modifica giro visite",
+                    f"Modifica giro visite · {self.versione_corrente.value.capitalize()}",
                     f"{action} per tutta la settimana "
                     f"dal {lun_date:%d/%m} al {friday:%d/%m}?",
                     QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
@@ -533,9 +682,15 @@ class ControllerScadenzario:
                 if answer != QMessageBox.StandardButton.Yes:
                     self.aggiorna_tabella()
                     return
-            self.model.set_giro_visite_settimana(
-                lun_str, self.anno_corrente, self.mese_corrente, nuovo_valore
-            )
+            try:
+                self.model.set_giro_visite_settimana(
+                    lun_str, self.anno_corrente, self.mese_corrente, nuovo_valore
+                )
+            except (OSError, ValueError) as error:
+                QMessageBox.warning(
+                    self.view,
+                    f"Giro visite {self.versione_corrente.value} non salvato", str(error),
+                )
             self.aggiorna_tabella()
             return
 
@@ -550,18 +705,86 @@ class ControllerScadenzario:
             ]
             if nuovo_valore.casefold() in {value.strip().casefold() for value in used}:
                 QMessageBox.warning(
-                    self.view, "Assegnazione non valida",
+                    self.view,
+                    f"Assegnazione non valida · {self.versione_corrente.value.capitalize()}",
                     "Lo specializzando ha già un altro incarico in questa giornata.",
                 )
                 self.aggiorna_tabella()
                 return
 
-        self.model.set_valore_cella(data_str, nome_riga, nuovo_valore)
+        sync_rooms = (
+            nome_riga in ("Sala Op. I", "Sala Op. II") and self.model_sale_op is not None
+        )
+        monday = data_corrente - datetime.timedelta(days=data_corrente.weekday())
+        if sync_rooms and self.versione_corrente == CalendarVersion.EFFETTIVO:
+            sync_rooms = self.model_sale_op.has_settimana(monday)
+        if sync_rooms and (
+            self.model_sale_op.get_stato_settimana(monday) == "CONVALIDATO"
+            or self.model_sale_op.get_stato_mese(
+                data_corrente.year, data_corrente.month
+            ) == "CONVALIDATO"
+        ):
+            QMessageBox.warning(
+                self.view, f"Sale {self.versione_corrente.value.capitalize()} convalidate",
+                "La settimana delle Sale Operatorie è già convalidata. "
+                "L'assegnazione non è stata modificata.",
+            )
+            self.aggiorna_tabella()
+            return
+        actual_assignments = None
+        if sync_rooms and self.versione_corrente == CalendarVersion.EFFETTIVO:
+            daily = self.model_sale_op.load_mese(
+                data_corrente.year, data_corrente.month
+            ).get("turni", {}).get(data_str, {})
+            actual_assignments = dict(daily.get("specializzandi") or {})
+            edited_role = "OR I" if nome_riga == "Sala Op. I" else "OR II"
+            other_role = "OR II" if edited_role == "OR I" else "OR I"
+            other_assignment = actual_assignments.get(other_role, "")
+            if nuovo_valore and nuovo_valore.casefold() == other_assignment.strip().casefold():
+                QMessageBox.warning(
+                    self.view, "Assegnazione non valida · Effettivo",
+                    "Lo specializzando è già assegnato all'altra sala nell'Effettivo "
+                    "delle Sale Operatorie. L'assegnazione non è stata modificata.",
+                )
+                self.aggiorna_tabella()
+                return
+            actual_assignments[edited_role] = nuovo_valore
+        if (
+            sync_rooms and self.versione_corrente == CalendarVersion.EFFETTIVO
+            and self._conflitto_assegnazioni_interventi(data_str, nome_riga, nuovo_valore)
+        ):
+            QMessageBox.warning(
+                self.view, "Assegnazioni Effettivo da verificare",
+                "La sala contiene interventi assegnati a uno specializzando diverso. "
+                "La modifica del turno non riassegna i singoli interventi né le attività "
+                "del libretto. L'assegnazione non è stata modificata.",
+            )
+            self.aggiorna_tabella()
+            return
+        try:
+            self.model.set_valore_cella(data_str, nome_riga, nuovo_valore)
+        except (OSError, ValueError) as error:
+            QMessageBox.warning(
+                self.view, f"Assegnazione {self.versione_corrente.value} non salvata", str(error),
+            )
+            self.aggiorna_tabella()
+            return
 
-        if nome_riga in ("Sala Op. I", "Sala Op. II") and self.model_sale_op is not None:
-            or1 = self.model.get_valore_cella(data_str, "Sala Op. I")
-            or2 = self.model.get_valore_cella(data_str, "Sala Op. II")
-            self.model_sale_op.set_specializzandi(data_str, or1, or2)
+        if sync_rooms:
+            try:
+                if actual_assignments is not None:
+                    or1 = actual_assignments.get("OR I", "")
+                    or2 = actual_assignments.get("OR II", "")
+                else:
+                    or1 = self.model.get_valore_cella(data_str, "Sala Op. I")
+                    or2 = self.model.get_valore_cella(data_str, "Sala Op. II")
+                self.model_sale_op.set_specializzandi(data_str, or1, or2)
+            except (OSError, ValueError) as error:
+                QMessageBox.warning(
+                    self.view, f"Sincronizzazione Sale {self.versione_corrente.value} non riuscita",
+                    f"Assegnazione dello Scadenzario salvata. "
+                    f"Aggiornamento delle Sale non riuscito:\n{error}",
+                )
 
         is_festivo = data_corrente.weekday() in (5, 6)
         is_oggi = (data_corrente == datetime.date.today())
@@ -585,6 +808,7 @@ class ControllerScadenzario:
 
     def scegli_mese_anno(self):
         dialog = DialogMeseAnno(self.mesi_ita, self.mese_corrente, self.anno_corrente, self.view)
+        dialog.setWindowTitle(f"Scegli mese · {self.versione_corrente.value.capitalize()}")
         if not dialog.exec():
             return
 
@@ -603,7 +827,7 @@ class ControllerScadenzario:
         elif self.modalita_corrente == "STORICO":
             max_history_date = self.get_max_history_date()
 
-            mesi_disp = self.model.get_mesi_disponibili()
+            mesi_disp = self._mesi_disponibili()
             storici_validi = [(a, m) for a, m in mesi_disp if datetime.date(a, m, 1) <= max_history_date]
 
             if not storici_validi:

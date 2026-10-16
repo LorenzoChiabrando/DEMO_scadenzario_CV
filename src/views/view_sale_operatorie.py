@@ -4,12 +4,13 @@ from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QPushButton,
     QTableWidget, QTableWidgetItem, QHeaderView, QScroller,
     QStackedWidget, QLabel, QSizePolicy, QGraphicsDropShadowEffect,
-    QGraphicsOpacityEffect, QFrame, QApplication,
+    QGraphicsOpacityEffect, QFrame, QApplication, QComboBox,
 )
 from PySide6.QtCore import QByteArray, QMimeData, Qt, Signal
 from PySide6.QtGui import QPixmap, QColor, QFont, QDrag, QPainter
 
 from src.calendar_presentation import person_initials
+from src.calendar_versions import CalendarVersion
 
 
 _OPERATION_MIME_TYPE = "application/x-mmsd-operation"
@@ -268,6 +269,21 @@ class ViewSaleOperatorie(QWidget):
         main_layout = QVBoxLayout(self)
         main_layout.setContentsMargins(0, 0, 0, 0)
 
+        version_tools = QHBoxLayout()
+        version_tools.setContentsMargins(30, 16, 30, 0)
+        version_label = QLabel("Versione:")
+        version_label.setObjectName("LblCalendarTools")
+        version_tools.addWidget(version_label)
+        self.combo_versione = QComboBox()
+        self.combo_versione.setObjectName("ComboVersioneSale")
+        self.combo_versione.setMinimumWidth(145)
+        self.combo_versione.addItem("Previsto", CalendarVersion.PREVISTO)
+        self.combo_versione.addItem("Effettivo", CalendarVersion.EFFETTIVO)
+        self.combo_versione.setAccessibleName("Versione del calendario sale operatorie")
+        version_tools.addWidget(self.combo_versione)
+        version_tools.addStretch()
+        main_layout.addLayout(version_tools)
+
         self.stacked_widget = QStackedWidget()
         main_layout.addWidget(self.stacked_widget)
 
@@ -326,7 +342,7 @@ class ViewSaleOperatorie(QWidget):
         )
         self.btn_pianificazione = self._crea_card(
             "Pianificazione",
-            "Genera e modifica il piano\nper le settimane future",
+            "Gestisci il piano\nper le settimane future",
             "asset/images/scadenzario/icona_pianificazione.png",
             "CardPianificazione",
         )
@@ -428,6 +444,12 @@ class ViewSaleOperatorie(QWidget):
         tools.addWidget(self.btn_esporta_pdf)
         layout.addLayout(tools)
 
+        self.lbl_versione_status = QLabel()
+        self.lbl_versione_status.setObjectName("LblCellDetail")
+        self.lbl_versione_status.setWordWrap(True)
+        self.lbl_versione_status.hide()
+        layout.addWidget(self.lbl_versione_status)
+
         self.tabella = TabellaOperatorie()
         self.tabella.setRowCount(2 + self.current_max_ops)
         self.tabella.setVerticalHeaderLabels(self.row_labels)
@@ -470,6 +492,13 @@ class ViewSaleOperatorie(QWidget):
         self.btn_pulisci.setCursor(Qt.CursorShape.PointingHandCursor)
         self.btn_pulisci.setVisible(False)
         layout.addWidget(self.btn_pulisci)
+
+        self.btn_crea_effettivo = QPushButton("CREA EFFETTIVO DAL PREVISTO CONVALIDATO")
+        self.btn_crea_effettivo.setObjectName("BtnConvalida")
+        self.btn_crea_effettivo.setFixedHeight(44)
+        self.btn_crea_effettivo.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.btn_crea_effettivo.hide()
+        layout.addWidget(self.btn_crea_effettivo)
 
         self.btn_convalida = QPushButton("CONVALIDA SETTIMANA")
         self.btn_convalida.setObjectName("BtnConvalida")
@@ -757,7 +786,7 @@ class ViewSaleOperatorie(QWidget):
         frame.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, True)
         return frame
 
-    def aggiorna_badge(self, modalita, stato):
+    def aggiorna_badge(self, modalita, stato, versione="Previsto"):
         colori_modalita = {
             "STORICO":        ("#334155", "#e2e8f0"),
             "CONSULTAZIONE":  ("#14532d", "#dcfce7"),
@@ -769,22 +798,19 @@ class ViewSaleOperatorie(QWidget):
         }
 
         fg_m, bg_m = colori_modalita.get(modalita, ("#334155", "#e2e8f0"))
-        self.lbl_modalita.setText(f"  {modalita}  ")
+        self.lbl_modalita.setText(f"  {modalita} · {versione.upper()}  ")
         self.lbl_modalita.setStyleSheet(
             f"color: {fg_m}; background-color: {bg_m}; font-weight: bold; "
             f"font-size: 12px; border-radius: 8px; padding: 5px 10px;"
         )
 
-        if modalita == "STORICO":
-            self.lbl_stato.setVisible(False)
-        else:
-            self.lbl_stato.setVisible(True)
-            fg_s, bg_s = colori_stato.get(stato, ("#334155", "#e2e8f0"))
-            self.lbl_stato.setText(f"  {stato}  ")
-            self.lbl_stato.setStyleSheet(
-                f"color: {fg_s}; background-color: {bg_s}; font-weight: bold; "
-                f"font-size: 12px; border-radius: 8px; padding: 5px 10px;"
-            )
+        self.lbl_stato.setVisible(True)
+        fg_s, bg_s = colori_stato.get(stato, ("#334155", "#e2e8f0"))
+        self.lbl_stato.setText(f"  {stato}  ")
+        self.lbl_stato.setStyleSheet(
+            f"color: {fg_s}; background-color: {bg_s}; font-weight: bold; "
+            f"font-size: 12px; border-radius: 8px; padding: 5px 10px;"
+        )
 
     def load_styles(self):
         style_path = os.path.join(PROJECT_ROOT, "asset", "styles", "sale_operatorie.qss")

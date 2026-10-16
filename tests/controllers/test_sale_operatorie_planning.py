@@ -7,8 +7,9 @@ from types import SimpleNamespace
 
 import pytest
 from PySide6.QtCore import QObject, QThread, Signal
-from PySide6.QtWidgets import QApplication
+from PySide6.QtWidgets import QApplication, QComboBox
 
+from src.calendar_versions import CalendarVersion
 from src.controllers.controller_sale_operatorie import ControllerSaleOperatorie
 from src.optimization.exceptions import PlanningCancelledError
 from src.optimization.results import SolveStatus
@@ -51,6 +52,10 @@ class _View(QObject):
         self.btn_pianifica = _Control("PIANIFICA SETTIMANA")
         self.btn_pulisci = _Control()
         self.btn_convalida = _Control()
+        self.btn_crea_effettivo = _Control()
+        self.combo_versione = QComboBox()
+        self.combo_versione.addItem("Previsto", CalendarVersion.PREVISTO)
+        self.combo_versione.addItem("Effettivo", CalendarVersion.EFFETTIVO)
         self.tabella = _Table()
 
 
@@ -60,6 +65,12 @@ class _Model:
 
     def get_operazioni(self, _day: str) -> list[dict[str, object]]:
         return []
+
+    def for_version(self, _version):
+        return self
+
+    def get_stato_settimana(self, _monday):
+        return "BOZZA"
 
     def invalidate_cache(self) -> None:
         self.cache_invalidations += 1
@@ -100,11 +111,12 @@ def _controller(service) -> tuple[ControllerSaleOperatorie, _View, _Model, list[
     controller = ControllerSaleOperatorie(
         view,
         model,
-        model_scadenzario=object(),
+        model_scadenzario=_Model(),
         project_root=".",
         planning_service=service,
     )
     controller.settimana_display = date(2026, 5, 4)
+    controller.modalita_corrente = "PIANIFICAZIONE"
     refreshes: list[bool] = []
     notices: list[tuple] = []
     controller.aggiorna_tabella = lambda: refreshes.append(True)
@@ -149,6 +161,9 @@ def test_planner_runs_off_the_ui_thread_then_invalidates_cache_and_refreshes(
         assert view.btn_pianifica.text() == "ANNULLA PIANIFICAZIONE"
         assert view.btn_pianifica.enabled is True
         assert view.tabella.enabled is False
+        assert view.combo_versione.isEnabled() is False
+        controller.imposta_versione(CalendarVersion.EFFETTIVO)
+        assert controller.versione == CalendarVersion.PREVISTO
         assert model.cache_invalidations == 0
 
         release_service.set()
@@ -159,6 +174,7 @@ def test_planner_runs_off_the_ui_thread_then_invalidates_cache_and_refreshes(
         assert notices[0][0] == "Pianificazione completata"
         assert view.btn_pianifica.text() == "PIANIFICA SETTIMANA"
         assert view.tabella.enabled is True
+        assert view.combo_versione.isEnabled() is True
         assert busy_states == [True, False]
     finally:
         release_service.set()
