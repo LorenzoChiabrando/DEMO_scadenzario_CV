@@ -27,6 +27,9 @@ class _FakeModel:
     def get_operazioni(self, day: str) -> list[dict[str, object]]:
         return copy.deepcopy(self.operations.get(day, []))
 
+    def get_stato_settimana(self, _monday):
+        return "BOZZA"
+
     def set_operazioni(self, day: str, operations: list[dict[str, object]]) -> None:
         self.set_calls += 1
         if self.set_calls == self.fail_at:

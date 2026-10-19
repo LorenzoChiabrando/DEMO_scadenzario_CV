@@ -91,6 +91,9 @@ class _Rooms:
     def get_specializzandi(self, _day: str) -> str:
         return ""
 
+    def get_stato_settimana(self, _monday: datetime.date) -> str:
+        return "BOZZA"
+
 
 class _Waiting:
     def get_pazienti_in_attesa(self) -> list[dict]:
@@ -113,6 +116,7 @@ def _rooms_controller() -> ControllerSaleOperatorie:
     controller.model_paz = _Waiting()
     controller.modalita_corrente = "PIANIFICAZIONE"
     controller._stato_corrente = "BOZZA"
+    controller.settimana_display = datetime.date(2026, 9, 14)
     return controller
 
 

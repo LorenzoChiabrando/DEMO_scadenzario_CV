@@ -1,6 +1,7 @@
 import copy
 import datetime
 import logging
+from dataclasses import replace
 from pathlib import Path
 from threading import Event
 
@@ -18,6 +19,7 @@ from src.calendar_presentation import (
     resident_legend,
     resolve_resident_name,
 )
+from src.calendar_versions import CalendarVersion
 from src.exports.calendar_pdf import CalendarPdfDocument, CalendarPdfRow, write_calendar_pdf
 from src.optimization.platform_service import plan_platform_week
 from src.patient_fields import parse_patient_insertion_date
@@ -180,8 +182,15 @@ class ControllerSaleOperatorie(QObject):
     ):
         super().__init__(view)
         self.view = view
-        self.model = model
-        self.model_scad = model_scadenzario
+        self.versione = CalendarVersion.PREVISTO
+        self._model_previsto = model.for_version(CalendarVersion.PREVISTO)
+        self._model_effettivo = None
+        self.model = self._model_previsto
+        self.model_scad = (
+            model_scadenzario.for_version(CalendarVersion.PREVISTO)
+            if model_scadenzario is not None else None
+        )
+        self._model_scad_effettivo = None
         self.model_paz = model_pazienti
         self.model_lib = model_libretto
         self._project_root = (
@@ -218,6 +227,10 @@ class ControllerSaleOperatorie(QObject):
         self._connect_signals()
 
     def _connect_signals(self):
+        self.view.combo_versione.currentIndexChanged.connect(
+            lambda _index: self.imposta_versione(self.view.combo_versione.currentData())
+        )
+        self.view.btn_crea_effettivo.clicked.connect(self.crea_effettivo_settimana)
         self.view.btn_storico.clicked.connect(
             lambda: self.apri_vista("STORICO"))
         self.view.btn_consultazione.clicked.connect(
@@ -243,6 +256,91 @@ class ControllerSaleOperatorie(QObject):
             )
             self.view.btn_esporta_pdf.clicked.connect(self.esporta_pdf)
 
+    @property
+    def versione_label(self) -> str:
+        return "Effettivo" if self._is_effettivo() else "Previsto"
+
+    def _is_effettivo(self) -> bool:
+        return getattr(self, "versione", CalendarVersion.PREVISTO) == CalendarVersion.EFFETTIVO
+
+    def _week_exists(self, monday: datetime.date | None = None) -> bool:
+        return not self._is_effettivo() or self.model.has_settimana(
+            monday or self.settimana_display
+        )
+
+    def _can_edit_week(self) -> bool:
+        """Keep all edit entry points bound to an existing, unconfirmed week."""
+        allowed_modes = {"PIANIFICAZIONE", "CONSULTAZIONE"}
+        if self._is_effettivo():
+            allowed_modes.add("STORICO")
+        if getattr(self, "modalita_corrente", "CONSULTAZIONE") not in allowed_modes:
+            return False
+        if (getattr(self, "_planning_worker", None) is not None
+                or getattr(self, "visualizzazione", "SETTIMANA") != "SETTIMANA"
+                or not self._week_exists()):
+            return False
+        if self.model.get_stato_settimana(self.settimana_display) == "CONVALIDATO":
+            return False
+        return True
+
+    def _refresh_history(self) -> None:
+        weeks = set(self._model_previsto.get_settimane_convalidate())
+        if self._is_effettivo():
+            for year, month in self.model.get_mesi_disponibili():
+                data = self.model.load_mese(year, month)
+                for monday_text in data.get("metadata", {}).get("settimane", {}):
+                    try:
+                        monday = datetime.date.fromisoformat(monday_text)
+                    except ValueError:
+                        continue
+                    if self.model.has_settimana(monday):
+                        weeks.add(monday)
+        self._settimane_convalidate = sorted(weeks)
+        if self.settimana_display in self._settimane_convalidate:
+            self._idx_storico = self._settimane_convalidate.index(self.settimana_display)
+
+    def imposta_versione(self, version: CalendarVersion | str) -> None:
+        """Select a bound calendar without copying data or changing the displayed period."""
+        version = CalendarVersion(version)
+        if self._planning_worker is not None:
+            self.view.combo_versione.blockSignals(True)
+            self.view.combo_versione.setCurrentIndex(
+                self.view.combo_versione.findData(self.versione)
+            )
+            self.view.combo_versione.blockSignals(False)
+            return
+        if version == self.versione:
+            return
+        if version == CalendarVersion.EFFETTIVO and self._model_effettivo is None:
+            self._model_effettivo = self._model_previsto.for_version(version)
+        self.versione = version
+        self.model = self._model_effettivo if self._is_effettivo() else self._model_previsto
+        self.model.invalidate_cache()
+        self.view.combo_versione.blockSignals(True)
+        self.view.combo_versione.setCurrentIndex(self.view.combo_versione.findData(version))
+        self.view.combo_versione.blockSignals(False)
+        if self.modalita_corrente == "STORICO":
+            self._refresh_history()
+        if self.modalita_corrente is not None:
+            self.aggiorna_tabella()
+
+    def crea_effettivo_settimana(self) -> None:
+        """Explicitly initialize a missing actual week from its confirmed forecast."""
+        if (not self._is_effettivo() or self.visualizzazione != "SETTIMANA"
+                or self._planning_worker is not None or self._week_exists()
+                or self._model_previsto.get_stato_settimana(self.settimana_display)
+                != "CONVALIDATO"):
+            return
+        try:
+            self._model_previsto.crea_effettivo_settimana(self.settimana_display)
+        except (OSError, ValueError, RuntimeError) as error:
+            self._avviso("Effettivo non creato", str(error), tipo="warning")
+            return
+        self.model.invalidate_cache()
+        if self.modalita_corrente == "STORICO":
+            self._refresh_history()
+        self.aggiorna_tabella()
+
     def apri_vista(self, modalita):
         self.modalita_corrente = modalita
         self.visualizzazione = "SETTIMANA"
@@ -250,7 +348,7 @@ class ControllerSaleOperatorie(QObject):
             self.view.set_month_mode(False)
 
         if modalita == "STORICO":
-            self._settimane_convalidate = self.model.get_settimane_convalidate()
+            self._refresh_history()
             if not self._settimane_convalidate:
                 self._avviso(
                     "Nessuna settimana convalidata",
@@ -315,8 +413,12 @@ class ControllerSaleOperatorie(QObject):
             self._sposta_mese(-1)
             return
         if self.modalita_corrente == "STORICO":
-            self._idx_storico -= 1
-            self.settimana_display = self._settimane_convalidate[self._idx_storico]
+            candidates = [day for day in self._settimane_convalidate
+                          if day < self.settimana_display]
+            if not candidates:
+                return
+            self.settimana_display = candidates[-1]
+            self._idx_storico = self._settimane_convalidate.index(self.settimana_display)
         else:
             self.settimana_display -= datetime.timedelta(weeks=1)
         self.aggiorna_tabella()
@@ -326,8 +428,12 @@ class ControllerSaleOperatorie(QObject):
             self._sposta_mese(1)
             return
         if self.modalita_corrente == "STORICO":
-            self._idx_storico += 1
-            self.settimana_display = self._settimane_convalidate[self._idx_storico]
+            candidates = [day for day in self._settimane_convalidate
+                          if day > self.settimana_display]
+            if not candidates:
+                return
+            self.settimana_display = candidates[0]
+            self._idx_storico = self._settimane_convalidate.index(self.settimana_display)
         else:
             self.settimana_display += datetime.timedelta(weeks=1)
         self.aggiorna_tabella()
@@ -344,12 +450,12 @@ class ControllerSaleOperatorie(QObject):
     def _sposta_mese(self, direction: int) -> None:
         if self.modalita_corrente == "STORICO":
             months = self._mesi_storici()
-            if self.mese_display not in months:
+            candidates = [month for month in months if (
+                month < self.mese_display if direction < 0 else month > self.mese_display
+            )]
+            if not candidates:
                 return
-            index = months.index(self.mese_display) + direction
-            if not 0 <= index < len(months):
-                return
-            self.mese_display = months[index]
+            self.mese_display = candidates[-1] if direction < 0 else candidates[0]
         else:
             month_index = self.mese_display.year * 12 + self.mese_display.month - 1 + direction
             year, zero_based_month = divmod(month_index, 12)
@@ -409,7 +515,8 @@ class ControllerSaleOperatorie(QObject):
             scope = f"settimana-{week_index + 1}"
 
         suggested = (
-            f"sale-operatorie-{anchor.year:04d}-{anchor.month:02d}-{scope}.pdf"
+            f"sale-operatorie-{self.versione_label.lower()}-"
+            f"{anchor.year:04d}-{anchor.month:02d}-{scope}.pdf"
         )
         path, _ = QFileDialog.getSaveFileName(
             self.view,
@@ -428,6 +535,7 @@ class ControllerSaleOperatorie(QObject):
                 dates,
                 residents,
             )
+            document = replace(document, title=f"{document.title} · {self.versione_label}")
             output_path = write_calendar_pdf(path, document)
         except (OSError, ValueError, RuntimeError) as error:
             messages.show_message(
@@ -446,10 +554,10 @@ class ControllerSaleOperatorie(QObject):
         )
 
     def _avviso(self, titolo: str, messaggio: str, tipo: str = "info", parent=None):
-        """Messaggio della sezione; ``tipo="warning"`` usa il tono di avviso."""
+        """Messaggio della sezione con la versione nel titolo; ``tipo="warning"`` usa il tono di avviso."""
         messages.show_message(
             parent or self.view,
-            titolo,
+            f"{titolo} · {self.versione_label}",
             messaggio,
             section=_SEZIONE,
             kind="warning" if tipo == "warning" else "info",
@@ -457,7 +565,9 @@ class ControllerSaleOperatorie(QObject):
 
     def _conferma(self, titolo: str, messaggio: str,
                   testo_si: str = "Conferma", parent=None) -> bool:
-        """Dialog Annulla/Conferma. Ritorna True se confermato."""
+        """Dialog Annulla/Conferma con la versione nel titolo. Ritorna True se confermato."""
+        if self.versione_label not in titolo:
+            titolo = f"{titolo} · {self.versione_label}"
         return messages.ask_confirmation(
             parent or self.view, titolo, messaggio, section=_SEZIONE, confirm_text=testo_si
         )
@@ -465,13 +575,19 @@ class ControllerSaleOperatorie(QObject):
     def _gestisci_navigazione(self, stato: str):
         self.view.btn_prev.setVisible(True)
         self.view.btn_next.setVisible(True)
+        self.view.btn_crea_effettivo.setVisible(
+            self._is_effettivo()
+            and self.visualizzazione == "SETTIMANA"
+            and not self._week_exists()
+            and self._model_previsto.get_stato_settimana(self.settimana_display)
+            == "CONVALIDATO"
+        )
 
         if self.visualizzazione == "MESE":
             if self.modalita_corrente == "STORICO":
                 months = self._mesi_storici()
-                index = months.index(self.mese_display) if self.mese_display in months else -1
-                self.view.btn_prev.setVisible(index > 0)
-                self.view.btn_next.setVisible(0 <= index < len(months) - 1)
+                self.view.btn_prev.setVisible(any(month < self.mese_display for month in months))
+                self.view.btn_next.setVisible(any(month > self.mese_display for month in months))
             elif self.modalita_corrente == "CONSULTAZIONE":
                 self.view.btn_prev.setVisible(False)
                 self.view.btn_next.setVisible(False)
@@ -486,9 +602,11 @@ class ControllerSaleOperatorie(QObject):
             return
 
         if self.modalita_corrente == "STORICO":
-            self.view.btn_prev.setVisible(self._idx_storico > 0)
+            self.view.btn_prev.setVisible(any(
+                day < self.settimana_display for day in self._settimane_convalidate
+            ))
             self.view.btn_next.setVisible(
-                self._idx_storico < len(self._settimane_convalidate) - 1
+                any(day > self.settimana_display for day in self._settimane_convalidate)
             )
 
         elif self.modalita_corrente == "CONSULTAZIONE":
@@ -501,17 +619,18 @@ class ControllerSaleOperatorie(QObject):
                 self.view.btn_prev.setVisible(False)
 
         show_pianifica = (
-            self.modalita_corrente in ("PIANIFICAZIONE", "CONSULTAZIONE")
-            and stato != "CONVALIDATO"
+            not self._is_effettivo() and self._can_edit_week()
         )
         self.view.btn_pianifica.setVisible(show_pianifica)
-        self.view.btn_pulisci.setVisible(show_pianifica)
+        self.view.btn_pulisci.setVisible(self._can_edit_week())
 
         show_convalida = (
-            self.modalita_corrente == "CONSULTAZIONE"
+            (self._is_effettivo() or self.modalita_corrente == "CONSULTAZIONE")
+            and self._week_exists()
             and stato == "BOZZA"
         )
         self.view.btn_convalida.setVisible(show_convalida)
+        self.view.btn_convalida.setText(f"CONVALIDA {self.versione_label.upper()}")
 
     def aggiorna_tabella(self):
         self.view.tabella.blockSignals(True)
@@ -524,7 +643,10 @@ class ControllerSaleOperatorie(QObject):
                 self.settimana_display + datetime.timedelta(days=offset)
                 for offset in range(5)
             )
-            stato = self.model.get_stato_settimana(self.settimana_display)
+            stato = (
+                self.model.get_stato_settimana(self.settimana_display)
+                if self._week_exists() else "ASSENTE"
+            )
         self._display_dates = dates
         self._stato_corrente = stato
         self._gestisci_navigazione(stato)
@@ -534,7 +656,23 @@ class ControllerSaleOperatorie(QObject):
         else:
             self.view.btn_mese_anno.setText(self._label_settimana())
         self.view.tabella.setEditTriggers(QTableWidget.EditTrigger.NoEditTriggers)
-        self.view.aggiorna_badge(self.modalita_corrente, stato)
+        self.view.aggiorna_badge(self.modalita_corrente, stato, self.versione_label)
+        missing_weeks = {
+            _get_lunedi(day) for day in dates
+            if day.weekday() < 5 and not self._week_exists(_get_lunedi(day))
+        }
+        if missing_weeks:
+            self.view.lbl_versione_status.setText(
+                "Effettivo non ancora creato per questa settimana. "
+                "La copia può essere creata dal Previsto convalidato."
+                if not month_mode else
+                "L'Effettivo manca per alcune settimane del mese. "
+                "Passa alla vista settimanale per creare le copie dai Previsti convalidati."
+            )
+        self.view.lbl_versione_status.setVisible(bool(missing_weeks))
+        self.view.lbl_dettaglio_cella.setText(
+            "La vista mensile usa le iniziali; fai click per aprire i dettagli."
+        )
         self.view.tabella.setColumnCount(len(dates))
         if month_mode:
             self.view.tabella.setHorizontalHeaderLabels([str(day.day) for day in dates])
@@ -543,15 +681,11 @@ class ControllerSaleOperatorie(QObject):
                 ["Lunedì", "Martedì", "Mercoledì", "Giovedì", "Venerdì"]
             )
 
-        can_edit = (
-            not month_mode
-            and
-            self.modalita_corrente in ("PIANIFICAZIONE", "CONSULTAZIONE")
-            and stato != "CONVALIDATO"
-        )
+        can_edit = self._can_edit_week()
 
         max_operations = max(
-            (len(self.model.get_operazioni(day.isoformat())) for day in dates),
+            (len(self.model.get_operazioni(day.isoformat())) for day in dates
+             if self._week_exists(_get_lunedi(day))),
             default=0,
         )
         self.view.adatta_righe_operazioni(max_operations)
@@ -572,7 +706,8 @@ class ControllerSaleOperatorie(QObject):
                 self.view.crea_item_giorno(giorno_label, is_weekend, is_oggi),
             )
 
-            spec_val = "" if is_weekend else self.model.get_specializzandi(data_str)
+            available = not is_weekend and self._week_exists(_get_lunedi(data_col))
+            spec_val = self.model.get_specializzandi(data_str) if available else ""
             item_spec = self.view.crea_item_cella(
                 spec_val,
                 is_weekend,
@@ -582,7 +717,7 @@ class ControllerSaleOperatorie(QObject):
             item_spec.setFlags(item_spec.flags() & ~Qt.ItemFlag.ItemIsEditable)
             self.view.tabella.setItem(1, col, item_spec)
 
-            operazioni = [] if is_weekend else self.model.get_operazioni(data_str)
+            operazioni = self.model.get_operazioni(data_str) if available else []
             drop_targets[col] = 2 + len(operazioni)
             for op_idx in range(self.view.current_max_ops):
                 row = op_idx + 2
@@ -621,6 +756,9 @@ class ControllerSaleOperatorie(QObject):
             self._request_planning_cancellation()
             return
 
+        if self._is_effettivo() or not self._can_edit_week():
+            return
+
         if not self.model_scad:
             self._avviso("Errore", "Dati scadenzario non disponibili.", tipo="warning")
             return
@@ -637,6 +775,8 @@ class ControllerSaleOperatorie(QObject):
         self._start_planning_worker(self.settimana_display, overwrite=overwrite)
 
     def _start_planning_worker(self, monday: datetime.date, *, overwrite: bool) -> None:
+        if self._is_effettivo():
+            return
         cancel_event = Event()
         worker = PlatformPlanningWorker(
             self._project_root,
@@ -696,7 +836,7 @@ class ControllerSaleOperatorie(QObject):
             self._set_planning_busy(False)
 
             if result is not None:
-                self.model.invalidate_cache()
+                self._model_previsto.invalidate_cache()
                 self.aggiorna_tabella()
                 objective = result.result.objective
                 objective_text = (
@@ -733,9 +873,15 @@ class ControllerSaleOperatorie(QObject):
             self.view.btn_next,
             self.view.btn_pulisci,
             self.view.btn_convalida,
+            self.view.btn_crea_effettivo,
+            self.view.combo_versione,
             self.view.tabella,
         ):
             control.setEnabled(not busy)
+        for name in ("btn_vista_settimana", "btn_vista_mese", "btn_esporta_pdf"):
+            control = getattr(self.view, name, None)
+            if control is not None:
+                control.setEnabled(not busy)
         self.view.btn_pianifica.setEnabled(True)
         self.view.btn_pianifica.setText(
             "ANNULLA PIANIFICAZIONE" if busy else self._planning_button_text
@@ -753,6 +899,8 @@ class ControllerSaleOperatorie(QObject):
         return worker.wait(timeout_ms)
 
     def pulisci_settimana(self):
+        if not self._can_edit_week():
+            return
         if not self._conferma(
             "Pulisci piano",
             f"Vuoi eliminare tutte le assegnazioni di pazienti\n"
@@ -770,24 +918,47 @@ class ControllerSaleOperatorie(QObject):
         self.aggiorna_tabella()
 
     def convalida_settimana(self):
+        if (not self._can_edit_week() or (
+                not self._is_effettivo()
+                and getattr(self, "modalita_corrente", "CONSULTAZIONE") != "CONSULTAZIONE")):
+            return
+        consequence = (
+            "I pazienti saranno segnati Completati e le attività registrate nei libretti."
+            if self._is_effettivo() else
+            "Il Previsto sarà congelato e sarà creata una copia Effettivo modificabile."
+        )
         if not self._conferma(
-            "Convalida settimana",
-            f"Confermi la convalida definitiva della settimana\n"
+            f"Convalida {self.versione_label}",
+            f"Confermi la convalida del {self.versione_label} della settimana\n"
             f"{self._label_settimana()}?\n\n"
-            "L'operazione non sarà reversibile.",
+            f"{consequence}\nL'operazione non sarà reversibile.",
             testo_si="Convalida",
         ):
             return
 
-        self.model.set_stato_settimana(self.settimana_display, "CONVALIDATO")
-        self._registra_in_libretti()
-        self._segna_pazienti_completati()
+        try:
+            if self._is_effettivo():
+                self.model.convalida_settimana(
+                    self.settimana_display,
+                    dir_libretti=getattr(self.model_lib, "dir_libretti", None),
+                )
+            else:
+                self.model.convalida_settimana(self.settimana_display)
+        except (OSError, ValueError, RuntimeError) as error:
+            self._avviso("Convalida non riuscita", str(error), tipo="warning")
+            self.aggiorna_tabella()
+            return
+        if getattr(self, "_model_effettivo", None) is not None:
+            self._model_effettivo.invalidate_cache()
+        if getattr(self, "modalita_corrente", None) == "STORICO":
+            self._refresh_history()
         self.aggiorna_tabella()
 
         self._avviso(
             "Convalida effettuata",
-            f"La settimana {self._label_settimana()} è stata convalidata.\n"
-            "Le attività operative sono state registrate nei libretti.",
+            f"{self.versione_label} della settimana {self._label_settimana()} convalidato.\n"
+            + ("I pazienti e i libretti sono stati aggiornati."
+               if self._is_effettivo() else "La copia Effettivo è disponibile per le modifiche."),
         )
 
     def _segna_pazienti_completati(self):
@@ -892,7 +1063,13 @@ class ControllerSaleOperatorie(QObject):
 
         if getattr(self, "model_scad", None) is None:
             return _finestra_giorno(day)[2]
-        month_data = self.model_scad.load_mese(day.year, day.month)
+        roster = self.model_scad
+        if self._is_effettivo():
+            if getattr(self, "_model_scad_effettivo", None) is None:
+                self._model_scad_effettivo = roster.for_version(CalendarVersion.EFFETTIVO)
+            if self._model_scad_effettivo.has_mese(day.year, day.month):
+                roster = self._model_scad_effettivo
+        month_data = roster.load_mese(day.year, day.month)
         configuration = month_data.get(OPTIMIZATION_KEY, {})
         rooms = configuration.get("sale_operatorie", {})
         default_capacity = rooms.get(room_id, {}).get("capacita_minuti", 600)
@@ -923,8 +1100,7 @@ class ControllerSaleOperatorie(QObject):
 
     def _scambia_operazioni(self, col: int, src_idx: int, dst_idx: int):
         """Swap di due operazioni nello stesso giorno, con conferma modal."""
-        if (self.modalita_corrente not in ("PIANIFICAZIONE", "CONSULTAZIONE")
-                or self._stato_corrente == "CONVALIDATO"):
+        if not self._can_edit_week():
             return
         if not (0 <= col < len(GIORNI_ITA) and src_idx >= 0 and dst_idx >= 0):
             return
@@ -960,8 +1136,7 @@ class ControllerSaleOperatorie(QObject):
 
     def _sposta_operazione(self, src_col: int, src_op_idx: int, dst_col: int):
         """Sposta un'operazione da un giorno a un altro (in coda) e salva il JSON."""
-        if (self.modalita_corrente not in ("PIANIFICAZIONE", "CONSULTAZIONE")
-                or self._stato_corrente == "CONVALIDATO"):
+        if not self._can_edit_week():
             return
         if not (0 <= src_col < len(GIORNI_ITA)
                 and 0 <= dst_col < len(GIORNI_ITA)
@@ -1075,9 +1250,12 @@ class ControllerSaleOperatorie(QObject):
         self.aggiorna_tabella()
 
     def _rimuovi_paziente_da_slot(self, dialog, data_str: str, op_idx: int):
+        if not self._can_edit_week() or not self._day_in_selected_week(data_str) or op_idx < 0:
+            return
         if not self._conferma(
             "Rimuovi paziente",
-            "Vuoi rimuovere questo paziente dal piano?\n\nIl paziente tornerà in lista d'attesa.",
+            f"Vuoi rimuovere questo paziente dal {self.versione_label}?\n\n"
+            "La disponibilità del paziente sarà aggiornata in base alle prenotazioni operative.",
             testo_si="Rimuovi",
             parent=dialog,
         ):
@@ -1096,6 +1274,8 @@ class ControllerSaleOperatorie(QObject):
         data_col: datetime.date,
         starts_by_room: dict[str, int],
     ):
+        if not self._can_edit_week() or not self._day_in_selected_week(data_str):
+            return
         if not self.model_paz:
             self._avviso("Errore", "Dati pazienti non disponibili.", tipo="warning")
             return
@@ -1115,14 +1295,16 @@ class ControllerSaleOperatorie(QObject):
         giorno_nome = GIORNI_ITA[data_col.weekday()]
         mese_nome   = MESI_ITA[data_col.month - 1]
         dialog = ModalDialog(
-            "Inserimento manuale",
+            f"Inserimento manuale · {self.versione_label}",
             f"Seleziona un paziente da aggiungere — "
             f"{giorno_nome} {data_col.day} {mese_nome} {data_col.year}",
             section=_SEZIONE,
             extra_styles=("pazienti.qss",),
             parent=self.view,
         )
-        dialog.setWindowTitle(f"Inserimento manuale — {giorno_nome} {data_col.day} {mese_nome}")
+        dialog.setWindowTitle(
+            f"Inserimento manuale · {self.versione_label} · {giorno_nome} {data_col.day} {mese_nome}"
+        )
         dialog.setMinimumWidth(560)
         dialog.setMinimumHeight(540)
         dialog.setSizeGripEnabled(True)
@@ -1299,6 +1481,8 @@ class ControllerSaleOperatorie(QObject):
         ora_inizio_min: int,
         room_id: str,
     ):
+        if not self._can_edit_week() or not self._day_in_selected_week(data_str):
+            return
         import random as _rnd
         day = datetime.date.fromisoformat(data_str)
         date_error = self._patient_date_error(paz, day)
@@ -1366,6 +1550,13 @@ class ControllerSaleOperatorie(QObject):
     def salva_modifica_cella(self, riga, colonna):
         pass
 
+    def _day_in_selected_week(self, day_text: str) -> bool:
+        try:
+            day = datetime.date.fromisoformat(day_text)
+        except ValueError:
+            return False
+        return day.weekday() < 5 and _get_lunedi(day) == self.settimana_display
+
     def _date_for_column(self, column: int) -> datetime.date:
         dates = getattr(self, "_display_dates", ())
         if 0 <= column < len(dates):
@@ -1405,7 +1596,7 @@ class ControllerSaleOperatorie(QObject):
 
     def _on_slot_vuoto_cliccato(self, riga, colonna):
         """Apre il dialog di inserimento manuale per il primo slot libero del giorno."""
-        if self.visualizzazione == "MESE":
+        if not self._can_edit_week():
             return
         data_col = self._date_for_column(colonna)
         data_str = data_col.strftime("%Y-%m-%d")
@@ -1419,11 +1610,11 @@ class ControllerSaleOperatorie(QObject):
                                data_str: str = None, op_idx: int = None):
         dialog = ModalDialog(
             slot.get("nome_paziente", "—"),
-            "Scheda paziente",
+            f"Scheda paziente · {self.versione_label}",
             section=_SEZIONE,
             parent=self.view,
         )
-        dialog.setWindowTitle("Dettagli Paziente")
+        dialog.setWindowTitle(f"Dettagli Paziente · {self.versione_label}")
         dialog.setMinimumWidth(520)
         dialog.setSizeGripEnabled(False)
         dialog.setAttribute(Qt.WidgetAttribute.WA_DeleteOnClose)
@@ -1529,8 +1720,7 @@ class ControllerSaleOperatorie(QObject):
                 _riga("Note cliniche", note)
 
         btn_rimuovi = None
-        if (self.modalita_corrente in ("PIANIFICAZIONE", "CONSULTAZIONE")
-                and self._stato_corrente != "CONVALIDATO"
+        if (self._can_edit_week()
                 and data_str is not None and op_idx is not None):
             btn_rimuovi = dialog.make_button("Rimuovi dal piano", "danger")
             btn_rimuovi.clicked.connect(

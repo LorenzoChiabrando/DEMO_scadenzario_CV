@@ -9,6 +9,7 @@ import pytest
 from PySide6.QtCore import QObject
 from PySide6.QtWidgets import QApplication
 
+from src.calendar_versions import CalendarVersion
 from src.controllers.controller_sale_operatorie import ControllerSaleOperatorie
 from src.models import patient_plan_state
 from src.models.data_manager_pazienti import DataManagerPazienti
@@ -89,13 +90,18 @@ def test_clearing_a_cross_month_week_restores_waiting_states(catalog) -> None:
     assert plans.get_operazioni("2026-10-02") == []
 
 
-def test_existing_confirmation_flow_marks_patient_completed(catalog) -> None:
+def test_planned_confirmation_keeps_patient_reserved_until_actual_confirmation(catalog) -> None:
     plans, patients, identifier = catalog
     plans.set_operazioni("2026-10-02", [_operation(identifier)])
 
     _controller(plans, patients).convalida_settimana()
 
     assert plans.get_stato_settimana(MONDAY) == "CONVALIDATO"
+    assert patients.get_paziente_by_id(identifier)["stato"] == "Pianificato"
+    actual = plans.for_version(CalendarVersion.EFFETTIVO)
+    assert actual.has_settimana(MONDAY)
+    assert actual.get_stato_settimana(MONDAY) == "BOZZA"
+    actual.convalida_settimana(MONDAY)
     assert patients.get_paziente_by_id(identifier)["stato"] == "Completato"
 
 

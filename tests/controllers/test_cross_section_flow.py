@@ -1,8 +1,8 @@
 """Percorso completo tra le sezioni, con la finestra principale e il solver veri.
 
 Libretto (nuovo specializzando) -> Scadenzario (lo assegna in Sala Op. I e convalida il
-mese) -> Sale operatorie (pianifica e, la settimana dopo, convalida) -> Libretto
-(interventi completati) e Lista pazienti (pazienti operati).
+mese) -> Sale operatorie (pianifica e, la settimana dopo, convalida il Previsto e poi
+l'Effettivo) -> Libretto (interventi completati) e Lista pazienti (pazienti operati).
 """
 
 from __future__ import annotations
@@ -19,6 +19,7 @@ from PySide6.QtWidgets import QApplication
 
 from main import MainWindow
 from scripts.reset_demo_data import reset_demo_data
+from src.calendar_versions import CalendarVersion
 from src.optimization import HighsSolver
 from src.views.components import messages
 from src.views.dialog_assegnazione_turno import DialogAssegnazioneSpecializzando
@@ -146,6 +147,8 @@ def _plan_week(window: MainWindow, qt_app: QApplication, notices: list[str]) -> 
 
 
 def _validate_week_a_week_later(window: MainWindow) -> None:
+    """Convalida il Previsto (che crea l'Effettivo) e poi l'Effettivo della settimana."""
+
     controller, view = window.controller_sale_operatorie, window.view_sale_operatorie
     view.btn_indietro.click()
     controller.settimana_corrente = _MONDAY
@@ -154,6 +157,13 @@ def _validate_week_a_week_later(window: MainWindow) -> None:
     assert not view.btn_convalida.isHidden()
     view.btn_convalida.click()
     assert window.data_manager_sale_operatorie.get_stato_settimana(_MONDAY) == "CONVALIDATO"
+
+    view.combo_versione.setCurrentIndex(view.combo_versione.findData(CalendarVersion.EFFETTIVO))
+    assert controller.model.version == CalendarVersion.EFFETTIVO
+    assert controller.model.get_stato_settimana(_MONDAY) == "BOZZA"
+    assert not view.btn_convalida.isHidden()
+    view.btn_convalida.click()
+    assert controller.model.get_stato_settimana(_MONDAY) == "CONVALIDATO"
 
 
 def _libretto_activities(window: MainWindow, resident_id: str, tab: str) -> list[dict]:

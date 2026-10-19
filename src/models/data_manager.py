@@ -1,38 +1,65 @@
+from __future__ import annotations
+
 import logging
 import os
+from copy import deepcopy
 from datetime import date, timedelta
 from pathlib import Path
 
+from src.calendar_versions import (
+    CalendarVersion,
+    CalendarVersionError,
+    month_filename,
+    version_directory,
+)
 from src.data_paths import resolve_data_directory
-from src.models.json_files import CorruptedDataError, read_json_object, write_json_atomic
+from src.models.json_files import CorruptedDataError, read_json_object
+from src.models.patient_plan_state import write_json_batch
 from src.planning_schema import OPTIMIZATION_KEY, default_schedule_optimization
 
 _LOGGER = logging.getLogger(__name__)
 
+
 class DataManager:
-    def __init__(self, dir_scadenzario=None, dir_libretti=None):
-        self.dir_scadenzario = str(
-            dir_scadenzario if dir_scadenzario is not None
+    def __init__(
+        self,
+        dir_scadenzario=None,
+        dir_libretti=None,
+        version: CalendarVersion = CalendarVersion.PREVISTO,
+    ):
+        self.version = CalendarVersion(version)
+        self._base_directory = Path(
+            dir_scadenzario
+            if dir_scadenzario is not None
             else resolve_data_directory() / "scadenzario"
         )
+        self.dir_scadenzario = str(version_directory(self._base_directory, self.version))
         self.dir_libretti = str(
-            dir_libretti if dir_libretti is not None
-            else Path(self.dir_scadenzario).resolve().parent / "libretti"
+            dir_libretti
+            if dir_libretti is not None
+            else self._base_directory.resolve().parent / "libretti"
         )
         self._cached_anno = None
         self._cached_mese = None
         self._cached_data = None
 
-        if not os.path.exists(self.dir_scadenzario):
-            os.makedirs(self.dir_scadenzario, exist_ok=True)
+    def for_version(self, version: CalendarVersion) -> DataManager:
+        """Return an independent manager retaining the original data directories."""
+        return DataManager(self._base_directory, self.dir_libretti, version=version)
+
+    def invalidate_cache(self) -> None:
+        """Discard data potentially changed by another bound manager."""
+        self._cached_anno = self._cached_mese = self._cached_data = None
+
+    def has_mese(self, anno: int, mese: int) -> bool:
+        """Return whether this version has a persisted month, without creating it."""
+        return Path(self._get_filepath(anno, mese)).is_file()
 
     def _get_filepath(self, anno, mese):
-        return os.path.join(self.dir_scadenzario, f"{anno:04d}-{mese:02d}.json")
+        return os.path.join(self.dir_scadenzario, month_filename(anno, mese))
 
     def load_mese(self, anno, mese):
-        if self._cached_anno == anno and self._cached_mese == mese:
-            return self._cached_data
-            
+
         filepath = self._get_filepath(anno, mese)
         if os.path.exists(filepath):
             # Un file danneggiato solleva CorruptedDataError: mai trattarlo come mese vuoto,
@@ -44,30 +71,78 @@ class DataManager:
                 "turni": {},
                 OPTIMIZATION_KEY: default_schedule_optimization(),
             }
-            
+
         self._cached_anno = anno
         self._cached_mese = mese
         self._cached_data = data
-        return data
+        return deepcopy(data)
 
-    def invalidate_cache(self):
-        """Fa rileggere il mese dal disco alla prossima richiesta."""
-        self._cached_anno = None
-        self._cached_mese = None
-        self._cached_data = None
+    def _validate_write(self, anno: int, mese: int, data: dict) -> None:
+        path = Path(self._get_filepath(anno, mese))
+        for day_text in data.get("turni", {}):
+            day = date.fromisoformat(day_text)
+            if (day.year, day.month) != (anno, mese):
+                raise CalendarVersionError("Il giorno non appartiene al mese da salvare.")
+        if not path.exists():
+            if self.version == CalendarVersion.EFFETTIVO:
+                raise CalendarVersionError("Creare prima la copia Effettivo del mese.")
+            previous = {}
+        else:
+            previous = read_json_object(path)
+        if previous.get("metadata", {}).get("stato") == "CONVALIDATO" and previous != data:
+            raise CalendarVersionError("Il mese è già convalidato e non può essere modificato.")
+        if (
+            data.get("metadata", {}).get("stato") == "CONVALIDATO"
+            and previous.get("metadata", {}).get("stato") != "CONVALIDATO"
+        ):
+            raise CalendarVersionError("Usare convalida_mese per convalidare il mese.")
 
     def save_mese(self, anno, mese, data):
-        filepath = self._get_filepath(anno, mese)
         try:
-            write_json_atomic(filepath, data)
-        except (OSError, TypeError, ValueError):
-            # ``data`` è già stato modificato in memoria: la cache tornerebbe dati mai salvati.
+            self._validate_write(anno, mese, data)
+            write_json_batch({Path(self._get_filepath(anno, mese)): data})
+        finally:
             self.invalidate_cache()
-            raise
 
-        self._cached_anno = anno
-        self._cached_mese = mese
-        self._cached_data = data
+    def _prepare_actual_month(self, anno: int, mese: int, source: dict) -> dict:
+        actual = self.for_version(CalendarVersion.EFFETTIVO)
+        if actual.has_mese(anno, mese):
+            raise CalendarVersionError("La copia Effettivo del mese esiste già.")
+        copied = deepcopy(source)
+        copied.setdefault("metadata", {})["stato"] = "BOZZA"
+        return {Path(actual._get_filepath(anno, mese)): copied}
+
+    def crea_effettivo_mese(self, anno: int, mese: int) -> None:
+        """Copy a confirmed planned month into a new editable actual month."""
+        planned = self.for_version(CalendarVersion.PREVISTO)
+        source = planned.load_mese(anno, mese)
+        if (
+            not planned.has_mese(anno, mese)
+            or source.get("metadata", {}).get("stato") != "CONVALIDATO"
+        ):
+            raise CalendarVersionError("Convalidare prima il mese Previsto.")
+        try:
+            write_json_batch(self._prepare_actual_month(anno, mese, source))
+        finally:
+            self.invalidate_cache()
+
+    def convalida_mese(self, anno: int, mese: int) -> None:
+        """Freeze this month; planned confirmation atomically creates its actual copy."""
+        self.invalidate_cache()
+        if not self.has_mese(anno, mese):
+            raise CalendarVersionError("Il mese da convalidare non esiste.")
+        source = self.load_mese(anno, mese)
+        if source.get("metadata", {}).get("stato") == "CONVALIDATO":
+            raise CalendarVersionError("Il mese è già convalidato.")
+        updates = {}
+        if self.version == CalendarVersion.PREVISTO:
+            updates.update(self._prepare_actual_month(anno, mese, source))
+        source.setdefault("metadata", {})["stato"] = "CONVALIDATO"
+        updates[Path(self._get_filepath(anno, mese))] = source
+        try:
+            write_json_batch(updates)
+        finally:
+            self.invalidate_cache()
 
     @property
     def specializzandi(self):
@@ -165,12 +240,24 @@ class DataManager:
 
     def set_giro_visite_settimana(self, lun_str: str, anno: int, mese: int, valore: str):
         self.valida_giro_visite_settimana(lun_str, valore)
-        for year, month in self._mesi_giro_visite(lun_str):
-            data = self.load_mese(year, month)
-            if data.get("metadata", {}).get("stato") == "CONVALIDATO":
-                continue
-            data.setdefault("giro_visite", {})[lun_str] = valore
-            self.save_mese(year, month, data)
+        if self.version == CalendarVersion.EFFETTIVO and any(
+            not self.has_mese(year, month) for year, month in self._mesi_giro_visite(lun_str)
+        ):
+            raise CalendarVersionError(
+                "Creare la copia Effettivo di tutti i mesi della settimana del Giro Visite."
+            )
+        updates = {}
+        try:
+            for year, month in self._mesi_giro_visite(lun_str):
+                data = self.load_mese(year, month)
+                if data.get("metadata", {}).get("stato") == "CONVALIDATO":
+                    continue
+                data.setdefault("giro_visite", {})[lun_str] = valore
+                self._validate_write(year, month, data)
+                updates[Path(self._get_filepath(year, month))] = data
+            write_json_batch(updates)
+        finally:
+            self.invalidate_cache()
 
     def get_mesi_disponibili(self):
         disponibili = []
@@ -192,6 +279,9 @@ class DataManager:
         return data.get("metadata", {}).get("stato", "BOZZA")
         
     def set_stato_mese(self, anno, mese, stato):
+        if stato == "CONVALIDATO":
+            self.convalida_mese(anno, mese)
+            return
         data = self.load_mese(anno, mese)
-        data["metadata"]["stato"] = stato
+        data.setdefault("metadata", {})["stato"] = stato
         self.save_mese(anno, mese, data)

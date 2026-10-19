@@ -212,6 +212,8 @@ def test_read_only_cells_never_open_a_modal(
     if scenario == "storico":
         controller.modalita_corrente = "STORICO"
     if scenario == "convalidato":
+        # Si convalida solo un mese già salvato.
+        model.save_mese(2026, 9, model.load_mese(2026, 9))
         model.set_stato_mese(2026, 9, "CONVALIDATO")
     controller.aggiorna_tabella()
     opened = _intercept(monkeypatch, DialogAssegnazioneSpecializzando)

@@ -180,6 +180,9 @@ class MainWindow(QMainWindow):
         self.controller_sale_operatorie.planning_busy_changed.connect(
             self.sidebar.setDisabled
         )
+        self.controller_sale_operatorie.planning_busy_changed.connect(
+            self.view_scad.combo_versione.setDisabled
+        )
 
         self.body_stack.addWidget(self.view_scad)
         self.body_stack.addWidget(self.view_libretto)

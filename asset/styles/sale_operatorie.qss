@@ -5,6 +5,19 @@ ViewSaleOperatorie {
     background-color: #f1f5f9;
 }
 
+QComboBox#ComboVersioneSale {
+    background-color: #ffffff;
+    color: #334155;
+    border: 1px solid #cbd5e1;
+    border-radius: 6px;
+    padding: 7px 12px;
+    font-size: 13px;
+}
+QComboBox#ComboVersioneSale:disabled {
+    color: #64748b;
+    background-color: #e2e8f0;
+}
+
 /* =========================================
    PAGINA SELEZIONE
 ========================================= */

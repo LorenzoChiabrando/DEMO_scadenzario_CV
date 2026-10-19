@@ -114,7 +114,7 @@ nella vista settimanale.
 
 Le assegnazioni dello Scadenziario si modificano da un dialog modale, aperto con un click su
 una cella modificabile (giorno feriale, mese non convalidato, modalità Corrente o
-Pianificazione). Il dialog degli specializzandi permette la ricerca per nome e mostra in grigio,
+Pianificazione; nello Storico solo l'Effettivo). Il dialog degli specializzandi permette la ricerca per nome e mostra in grigio,
 con il motivo, chi ha già un altro incarico nella giornata o nella settimana del giro visite;
 la riga Tipo Guardia propone 118, PI e L con i colori della legenda. Entrambi permettono di
 rimuovere l'assegnazione corrente.
@@ -124,8 +124,32 @@ l'assegnazione della settimana: la prima scelta riempie tutte le celle, mentre s
 e cancellazione richiedono conferma. Il controllo dei conflitti considera tutti i giorni da
 lunedì a venerdì, anche a cavallo di due mesi. Una settimana che comprende un mese convalidato
 mantiene l'assegnazione già confermata. Nei libretti il riepilogo di orario e sede è in sola
-lettura; la conferma delle singole attività resta disponibile. Le sale operatorie mostrano
-i codici degli interventi e conservano l'ID paziente nei dati, senza visualizzarlo nelle schede.
+lettura; la conferma delle singole attività resta disponibile, tranne per gli interventi
+chirurgici, che si registrano con la convalida dell'Effettivo delle sale operatorie. Le sale
+operatorie mostrano i codici degli interventi e conservano l'ID paziente nei dati, senza
+visualizzarlo nelle schede.
+
+### Previsto ed Effettivo
+
+Scadenzario e Sale operatorie hanno due versioni dello stesso calendario, scelte dal menu
+**Calendario** senza cambiare periodo né vista:
+
+- **Previsto** è il piano. I file restano in `scadenzario/AAAA-MM.json` e
+  `sale_operatorie/AAAA-MM.json`: i dati esistenti sono già il Previsto, senza migrazione.
+- **Effettivo** registra ciò che è avvenuto, in `scadenzario/effettivo/` e
+  `sale_operatorie/effettivo/`. È una copia del Previsto convalidato: la convalida del mese
+  (Scadenzario) o della settimana (Sale) la crea automaticamente; per i periodi convalidati
+  prima di questa funzione c'è il pulsante **Crea Effettivo dal Previsto**. La copia si
+  corregge senza toccare il Previsto, anche dallo Storico. Leggere un Effettivo mancante non
+  crea file.
+- Sala Op. I e II si sincronizzano con le Sale operatorie della stessa versione. Nell'Effettivo
+  una settimana delle Sale non ancora creata non viene toccata, e una modifica che contraddice
+  gli interventi già assegnati in quella sala viene rifiutata.
+- Solo la convalida dell'**Effettivo** di una settimana delle Sale segna i pazienti come
+  Completati e registra gli interventi nei libretti. La convalida del Previsto congela il piano.
+- Il planner pianifica solo il Previsto e legge lo scadenzario Previsto; le prenotazioni dei
+  pazienti tengono conto delle settimane Effettivo già create.
+- PDF, badge, titoli dei dialog e nomi dei file esportati indicano la versione.
 
 Il comando **Esporta PDF** crea un documento da stampa per l'intero mese o una singola
 settimana su un foglio A4 orizzontale, con un giorno per colonna come a schermo. La tabella

@@ -1,7 +1,10 @@
+from __future__ import annotations
+
 from datetime import date as _date, timedelta as _td
 
 from PySide6.QtCore import Qt
 from PySide6.QtWidgets import QListWidgetItem
+from src.calendar_versions import CalendarVersion
 from src.views.components import messages
 from src.views.view_nuovo_specializzando import DialogNuovoSpecializzando
 
@@ -142,8 +145,8 @@ class ControllerLibretto:
 
     def _get_pianificate(self, spec: dict) -> list:
         """
-        Pianificate = TUTTE le righe scadenzario (passate e future) non ancora confermate.
-        Un'attività è confermata quando appare in attivita_extra o attivita array (OR).
+        Legge l'Effettivo dove esiste, altrimenti il Previsto, senza confermare attività.
+        Le attività non operatorie mantengono la conferma manuale nel libretto.
         """
         if not self.model_scad:
             return []
@@ -160,9 +163,49 @@ class ControllerLibretto:
         }
 
         result = []
+        scad_previsto = self.model_scad.for_version(CalendarVersion.PREVISTO)
+        scad_effettivo = self.model_scad.for_version(CalendarVersion.EFFETTIVO)
+        sale_previste = (
+            self.model_sale_op.for_version(CalendarVersion.PREVISTO)
+            if self.model_sale_op else None
+        )
+        sale_effettive = (
+            self.model_sale_op.for_version(CalendarVersion.EFFETTIVO)
+            if self.model_sale_op else None
+        )
+        mesi_sale_effettive = {
+            (anno, mese): sale_effettive.load_mese(anno, mese)
+            for anno, mese in sale_effettive.get_mesi_disponibili()
+        } if sale_effettive else {}
+        settimane_effettive = {
+            lunedi
+            for (anno, mese), dati_mese in mesi_sale_effettive.items()
+            for lunedi in dati_mese.get("metadata", {}).get("settimane", {})
+            if lunedi.startswith(f"{anno:04d}-{mese:02d}-")
+        }
+        mesi_sale_previste = {}
+        mesi = set(scad_previsto.get_mesi_disponibili()) | set(
+            scad_effettivo.get_mesi_disponibili()
+        )
+        mesi.update(mesi_sale_effettive)
 
-        for anno, mese in self.model_scad.get_mesi_disponibili():
-            dati = self.model_scad.load_mese(anno, mese)
+        for anno, mese in sorted(mesi):
+            scad = scad_effettivo if scad_effettivo.has_mese(anno, mese) else scad_previsto
+            dati = scad.load_mese(anno, mese)
+            turni = dict(dati.get("turni", {}))
+            giorni_effettivi = mesi_sale_effettive.get((anno, mese), {}).get("turni", {})
+            # Le correzioni nelle Sale effettive prevalgono sul turno originario.
+            for data_str, giorno_sale in giorni_effettivi.items():
+                giorno = _date.fromisoformat(data_str)
+                lunedi = giorno - _td(days=giorno.weekday())
+                if lunedi.isoformat() not in settimane_effettive:
+                    continue
+                assegnazioni = giorno_sale.get("specializzandi", {})
+                turni[data_str] = {
+                    **turni.get(data_str, {}),
+                    "Sala Op. I": assegnazioni.get("OR I", ""),
+                    "Sala Op. II": assegnazioni.get("OR II", ""),
+                }
 
             for lun_str, assegnato in dati.get("giro_visite", {}).items():
                 if not self._nome_match(assegnato, nome_form):
@@ -190,11 +233,12 @@ class ControllerLibretto:
                         "note":       "",
                     })
 
-            for data_str, turno in dati.get("turni", {}).items():
+            for data_str, turno in turni.items():
                 try:
-                    _date.fromisoformat(data_str)
+                    giorno = _date.fromisoformat(data_str)
                 except ValueError:
                     continue
+                lunedi = giorno - _td(days=giorno.weekday())
                 for row_name, valore in turno.items():
                     if row_name == "Tipo Guardia":
                         continue
@@ -219,15 +263,24 @@ class ControllerLibretto:
                         "ruolo":      row_name,
                         "note":       "",
                     }
-                    if row_name in ("Sala Op. I", "Sala Op. II") and self.model_sale_op:
+                    if row_name in ("Sala Op. I", "Sala Op. II"):
+                        entry["or_pianificata"] = True
                         slots = []
-                        for op in self.model_sale_op.get_operazioni(data_str):
+                        if lunedi.isoformat() in settimane_effettive:
+                            mese_sale = mesi_sale_effettive.get((anno, mese), {})
+                        elif sale_previste:
+                            if (anno, mese) not in mesi_sale_previste:
+                                mesi_sale_previste[anno, mese] = sale_previste.load_mese(anno, mese)
+                            mese_sale = mesi_sale_previste[anno, mese]
+                        else:
+                            mese_sale = {}
+                        operations = mese_sale.get("turni", {}).get(data_str, {}).get("operazioni", [])
+                        for op in operations:
                             if op.get("nome_paziente") or op.get("intervento"):
                                 slots.append({
                                     "label": f"{op.get('ora_inizio','?')}–{op.get('ora_fine','?')}",
                                     **op
                                 })
-                        entry["or_pianificata"] = True
                         entry["slots"] = slots
                     result.append(entry)
 
@@ -299,6 +352,9 @@ class ControllerLibretto:
         meta = self.model.get_meta_giorno(spec_id, data_str)
 
         def _on_save(att_data):
+            if (att_data.get("sede") == "Sala Operatoria"
+                    or att_data.get("ruolo") in ("Sala Op. I", "Sala Op. II", "OR I", "OR II")):
+                return
             self.model.salva_attivita_extra(spec_id, att_data)
             self._aggiorna_cache(self._spec_corrente)
             self._popola_lista_attivita(self._categoria_corrente)

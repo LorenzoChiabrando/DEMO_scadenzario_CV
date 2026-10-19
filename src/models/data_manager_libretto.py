@@ -1,13 +1,19 @@
-import os
+from __future__ import annotations
+
 import json
 import logging
-from datetime import date as _date
+import os
+from pathlib import Path
+from unicodedata import normalize
 
+from src.calendar_versions import CalendarVersionError
 from src.data_paths import resolve_data_directory
 from src.models.id_generator import next_available_id
 from src.models.json_files import CorruptedDataError, read_json_object, write_json_atomic
+from src.models.patient_plan_state import write_json_batch
 
 _LOGGER = logging.getLogger(__name__)
+
 
 class DataManagerLibretto:
     def __init__(self, dir_libretti=None):
@@ -83,50 +89,83 @@ class DataManagerLibretto:
             return True
         return False
 
+    @staticmethod
+    def _normalized_resident_name(value: str) -> str:
+        """Normalize a full display name without splitting compound surnames."""
+        return " ".join(normalize("NFKC", value).split()).casefold().rstrip(".")
+
     def _trova_spec_by_nome_formattato(self, nome_formattato: str) -> dict | None:
-        """
-        Trova lo specializzando dato il formato 'Cognome I.' usato nelle sale operatorie.
-        Ritorna il dict completo o None se non trovato.
-        """
-        parts = nome_formattato.strip().split()
-        if len(parts) < 2:
-            return None
-        cognome_target = parts[0].lower()
-        iniziale_target = parts[1].rstrip(".").upper()
+        """Resolve the complete ``Surname I.`` label only when it is unique."""
+        target = self._normalized_resident_name(nome_formattato)
+        matches = []
         for spec in self.get_tutti_specializzandi():
-            if (spec.get("cognome", "").lower() == cognome_target and
-                    spec.get("nome", "")[:1].upper() == iniziale_target):
-                return spec
-        return None
+            surname = spec.get("cognome", "").strip()
+            name = spec.get("nome", "").strip()
+            if not surname or not name:
+                continue
+            candidate = self._normalized_resident_name(f"{surname} {name[0]}.")
+            if candidate == target:
+                matches.append(spec)
+        return matches[0] if len(matches) == 1 else None
+
+    @staticmethod
+    def _activity_key(activity: dict) -> tuple[str, str]:
+        """Use the legacy start time only when the activity has no slot field."""
+        slot = activity["slot"] if "slot" in activity else activity["ora_inizio"]
+        return activity["data"], slot
+
+    def prepara_attivita_settimana(
+        self,
+        attivita_per_spec: dict,
+        *,
+        require_all: bool = False,
+        attivita_ordinate: list[tuple[str, str, dict]] | None = None,
+    ) -> dict[Path, dict]:
+        """Prepare deduplicated activities by stable ID or unique legacy label.
+
+        ``attivita_ordinate`` contains (resident ID, display name, activity) entries
+        in operation order. Nonempty IDs never fall back to a display name.
+        ``require_all`` rejects missing or ambiguous recipients before any write.
+        The first (date, slot) entry wins; legacy records without ``slot`` use
+        ``ora_inizio`` for both deduplication and ordering without being modified.
+        """
+        recipients = [
+            (self._trova_spec_by_nome_formattato(name), activities)
+            for name, activities in attivita_per_spec.items()
+        ]
+        catalog = self.get_tutti_specializzandi() if attivita_ordinate else []
+        for identifier, name, activity in attivita_ordinate or []:
+            if identifier:
+                matches = [spec for spec in catalog if spec.get("id") == identifier]
+                spec = matches[0] if len(matches) == 1 else None
+            else:
+                spec = self._trova_spec_by_nome_formattato(name)
+            recipients.append((spec, [activity]))
+        updates: dict[Path, dict] = {}
+        for spec, activities in recipients:
+            if spec is None:
+                if require_all:
+                    raise CalendarVersionError(
+                        "Un assegnatario è assente o ambiguo nei libretti: correggere il piano."
+                    )
+                continue
+            filepath = Path(self.dir_libretti) / f"{spec['id']}.json"
+            if filepath not in updates:
+                updates[filepath] = read_json_object(filepath)
+            dati = updates[filepath]
+            records = dati.setdefault("attivita", [])
+            existing = {self._activity_key(record) for record in records}
+            for activity in activities:
+                key = self._activity_key(activity)
+                if key not in existing:
+                    records.append(activity)
+                    existing.add(key)
+            records.sort(key=self._activity_key)
+        return updates
 
     def registra_attivita_settimana(self, attivita_per_spec: dict):
-        """
-        Riceve un dict {nome_formattato: [lista_di_attivita_dict]} e scrive
-        ogni attività nel file JSON dello specializzando corrispondente.
-        La de-duplicazione avviene sulla chiave (data, slot): non aggiunge
-        record già presenti.
-        """
-        for nome_form, lista_att in attivita_per_spec.items():
-            spec = self._trova_spec_by_nome_formattato(nome_form)
-            if not spec:
-                continue
-            spec_id = spec["id"]
-            filepath = os.path.join(self.dir_libretti, f"{spec_id}.json")
-            dati = read_json_object(filepath)
-
-            if "attivita" not in dati:
-                dati["attivita"] = []
-
-            chiavi_esistenti = {(a["data"], a["slot"]) for a in dati["attivita"]}
-            for att in lista_att:
-                chiave = (att["data"], att["slot"])
-                if chiave not in chiavi_esistenti:
-                    dati["attivita"].append(att)
-                    chiavi_esistenti.add(chiave)
-
-            dati["attivita"].sort(key=lambda a: (a.get("data", ""), a.get("slot", "")))
-
-            write_json_atomic(filepath, dati)
+        """Persist activities, retaining the historical (date, slot) identity."""
+        write_json_batch(self.prepara_attivita_settimana(attivita_per_spec))
 
     def get_attivita(self, spec_id: str) -> list:
         spec = self.get_specializzando_by_id(spec_id)

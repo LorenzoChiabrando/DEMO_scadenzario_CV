@@ -1,7 +1,7 @@
 import os
 from src.data_paths import PROJECT_ROOT
 from PySide6.QtWidgets import (
-    QWidget, QVBoxLayout, QHBoxLayout, QPushButton,
+    QWidget, QVBoxLayout, QHBoxLayout, QPushButton, QComboBox,
     QAbstractItemView, QTableView, QHeaderView, QScroller,
     QStackedWidget, QLabel, QSizePolicy, QGraphicsDropShadowEffect, QFrame,
     QSpacerItem
@@ -165,6 +165,29 @@ class ViewScadenzario(QWidget):
         nav.addStretch()
         nav.addLayout(badge_row)
         layout.addLayout(nav)
+
+        version_row = QHBoxLayout()
+        version_row.setSpacing(12)
+        version_label = QLabel("Calendario:")
+        version_label.setObjectName("LblCalendarTools")
+        version_row.addWidget(version_label)
+        self.combo_versione = QComboBox()
+        self.combo_versione.setObjectName("ComboVersioneScadenzario")
+        self.combo_versione.addItem("Previsto", "previsto")
+        self.combo_versione.addItem("Effettivo", "effettivo")
+        self.combo_versione.setAccessibleName("Versione dello scadenzario")
+        self.combo_versione.setMinimumWidth(150)
+        version_row.addWidget(self.combo_versione)
+        self.lbl_versione_info = QLabel("")
+        self.lbl_versione_info.setObjectName("LblCalendarTools")
+        self.lbl_versione_info.setWordWrap(True)
+        version_row.addWidget(self.lbl_versione_info, 1)
+        self.btn_crea_effettivo = QPushButton("Crea Effettivo dal Previsto")
+        self.btn_crea_effettivo.setObjectName("BtnCalendarTool")
+        self.btn_crea_effettivo.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.btn_crea_effettivo.setVisible(False)
+        version_row.addWidget(self.btn_crea_effettivo)
+        layout.addLayout(version_row)
 
         tools = QHBoxLayout()
         tools.setSpacing(8)
@@ -413,13 +436,15 @@ class ViewScadenzario(QWidget):
         giorno: str,
         riga: str,
         nome_completo: str,
+        versione: str = "previsto",
     ) -> None:
         self.lbl_dettaglio_cella.setText(
-            f"{giorno} · {row_display_label(riga)}: {nome_completo or '—'}"
+            f"{versione.capitalize()} · {giorno} · {row_display_label(riga)}: "
+            f"{nome_completo or '—'}"
         )
 
-    def aggiorna_badge_modalita(self, modalita, stato):
-        """Aggiorna i badge con colori semantici. In STORICO nasconde il badge stato."""
+    def aggiorna_badge_modalita(self, modalita, stato, versione="previsto"):
+        """Mostra modalità, versione e stato anche per gli effettivi storici."""
         colori_modalita = {
             "STORICO":        ("#334155", "#e2e8f0"),
             "CORRENTE":       ("#14532d", "#dcfce7"),
@@ -431,22 +456,19 @@ class ViewScadenzario(QWidget):
         }
 
         fg_m, bg_m = colori_modalita.get(modalita, ("#334155", "#e2e8f0"))
-        self.lbl_modalita.setText(f"  {modalita}  ")
+        self.lbl_modalita.setText(f"  {modalita or 'CALENDARIO'} · {versione.upper()}  ")
         self.lbl_modalita.setStyleSheet(
             f"color: {fg_m}; background-color: {bg_m}; font-weight: bold; "
             f"font-size: 12px; border-radius: 8px; padding: 5px 10px;"
         )
 
-        if modalita == "STORICO":
-            self.lbl_stato.setVisible(False)
-        else:
-            self.lbl_stato.setVisible(True)
-            fg_s, bg_s = colori_stato.get(stato, ("#334155", "#e2e8f0"))
-            self.lbl_stato.setText(f"  {stato}  ")
-            self.lbl_stato.setStyleSheet(
-                f"color: {fg_s}; background-color: {bg_s}; font-weight: bold; "
-                f"font-size: 12px; border-radius: 8px; padding: 5px 10px;"
-            )
+        self.lbl_stato.setVisible(True)
+        fg_s, bg_s = colori_stato.get(stato, ("#334155", "#e2e8f0"))
+        self.lbl_stato.setText(f"  {stato}  ")
+        self.lbl_stato.setStyleSheet(
+            f"color: {fg_s}; background-color: {bg_s}; font-weight: bold; "
+            f"font-size: 12px; border-radius: 8px; padding: 5px 10px;"
+        )
 
     def load_styles(self):
         style_path = os.path.join(PROJECT_ROOT, "asset", "styles", "scadenzario.qss")
