@@ -6,6 +6,8 @@ from datetime import date
 from pathlib import Path
 
 import pytest
+from PySide6.QtCore import QPoint
+from PySide6.QtGui import QColor
 from PySide6.QtWidgets import (
     QApplication,
     QDialog,
@@ -91,8 +93,8 @@ def _controller(
     return controller
 
 
-@pytest.mark.parametrize("page", [0, 1])
-def test_version_selector_is_visible_on_dashboard_and_calendar(
+@pytest.mark.parametrize("page", [0, 1], ids=["dashboard", "calendar"])
+def test_version_selector_belongs_to_the_calendar_page(
     sale_view: ViewSaleOperatorie,
     qt_app: QApplication,
     page: int,
@@ -101,13 +103,50 @@ def test_version_selector_is_visible_on_dashboard_and_calendar(
     qt_app.processEvents()
     selector = sale_view.combo_versione
 
-    assert selector.isVisible()
+    # As in the monthly schedule, the version is chosen next to the calendar it changes.
+    assert selector.isVisible() is (page == 1)
     assert selector.count() == 2
     assert [(selector.itemText(index), selector.itemData(index)) for index in range(2)] == [
         ("Previsto", CalendarVersion.PREVISTO),
         ("Effettivo", CalendarVersion.EFFETTIVO),
     ]
     assert selector.currentData() == CalendarVersion.PREVISTO
+
+
+def test_version_selector_draws_a_styled_drop_down_arrow(
+    sale_view: ViewSaleOperatorie,
+    qt_app: QApplication,
+) -> None:
+    # Without ::drop-down and ::down-arrow rules Qt paints the native drop-down: dark frame.
+    sale_view.stacked_widget.setCurrentIndex(1)
+    qt_app.processEvents()
+    image = sale_view.combo_versione.grab().toImage()
+    drop_down = [
+        QColor(image.pixel(x, y)).lightness()
+        for x in range(image.width() - 30, image.width())
+        for y in range(image.height())
+    ]
+
+    assert min(drop_down) >= 90, "native drop-down frame drawn instead of the QSS one"
+    assert min(drop_down) < 200, "drop-down arrow missing"
+
+
+def test_calendar_page_fits_a_laptop_screen_with_actions_in_one_row(
+    sale_view: ViewSaleOperatorie,
+    qt_app: QApplication,
+) -> None:
+    sale_view.stacked_widget.setCurrentIndex(1)
+    actions = (sale_view.btn_pianifica, sale_view.btn_pulisci, sale_view.btn_convalida)
+    for button in actions:  # current week in draft: every action is offered
+        button.setVisible(True)
+    sale_view.adatta_righe_operazioni(5)
+    qt_app.processEvents()
+
+    # 1536x960 laptop at 200%: about 890 px left under the top bar and the title bar.
+    assert sale_view.stacked_widget.widget(1).minimumSizeHint().height() <= 700
+    assert len({button.mapTo(sale_view, QPoint(0, 0)).y() for button in actions}) == 1
+    # With enough room the table shows every row and leaves no blank area under the last one.
+    assert sale_view.tabella.height() == sale_view.tabella.maximumHeight()
 
 
 @pytest.mark.parametrize("actual_exists", [True, False], ids=["draft", "missing"])

@@ -127,12 +127,14 @@ mantiene l'assegnazione già confermata. Nei libretti il riepilogo di orario e s
 lettura; la conferma delle singole attività resta disponibile, tranne per gli interventi
 chirurgici, che si registrano con la convalida dell'Effettivo delle sale operatorie. Le sale
 operatorie mostrano i codici degli interventi e conservano l'ID paziente nei dati, senza
-visualizzarlo nelle schede.
+visualizzarlo nelle schede. Se la colonna è stretta i codici restano interi e quelli che non
+entrano sono contati (`+1`); la durata, già leggibile dall'orario, compare solo se c'è spazio.
+Il dettaglio completo si apre facendo clic sulla scheda.
 
 ### Previsto ed Effettivo
 
-Scadenzario e Sale operatorie hanno due versioni dello stesso calendario, scelte dal menu
-**Calendario** senza cambiare periodo né vista:
+Scadenzario e Sale operatorie hanno due versioni dello stesso calendario, scelte senza cambiare
+periodo né vista dal menu **Calendario** nello Scadenzario e **Versione** nelle Sale operatorie:
 
 - **Previsto** è il piano. I file restano in `scadenzario/AAAA-MM.json` e
   `sale_operatorie/AAAA-MM.json`: i dati esistenti sono già il Previsto, senza migrazione.

@@ -41,11 +41,12 @@ _ICONS_PREFIX = "icons"
 _HORIZONTAL_MARGIN = 32
 
 
-def _register_icon_path() -> None:
+def register_icon_path() -> None:
     """Rende disponibili nei QSS le icone ``url(icons:nome.svg)``.
 
     I fogli di stile Qt non supportano gli URI ``data:`` e risolvono i path relativi
     rispetto alla cartella di avvio: il search path li rende indipendenti da essa.
+    Va chiamata prima di applicare un foglio di stile che usa le icone.
     """
 
     if str(_ICONS_DIR) not in QDir.searchPaths(_ICONS_PREFIX):
@@ -149,7 +150,7 @@ class ModalDialog(QDialog):
         self.footer.setSpacing(12)
         root.addLayout(self.footer)
 
-        _register_icon_path()
+        register_icon_path()
         styles = [_read_style(name) for name in extra_styles]
         styles.append(_read_style("dialog.qss"))
         self.setStyleSheet("\n".join(styles))

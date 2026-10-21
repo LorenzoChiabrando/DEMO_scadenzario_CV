@@ -1,10 +1,19 @@
 from __future__ import annotations
 
+import re
 from pathlib import Path
 
 import pytest
 from PySide6.QtCore import QByteArray, QMimeData, Qt
-from PySide6.QtWidgets import QApplication, QDialog, QLabel, QPushButton, QSpinBox, QWidget
+from PySide6.QtWidgets import (
+    QApplication,
+    QDialog,
+    QHeaderView,
+    QLabel,
+    QPushButton,
+    QSpinBox,
+    QWidget,
+)
 
 from src.controllers.controller_sale_operatorie import ControllerSaleOperatorie
 from src.views.dialog_bulk_pazienti import _COL_DUR, DialogBulkPazienti
@@ -73,6 +82,114 @@ def test_operation_card_displays_the_physical_room(qt_app: QApplication) -> None
     assert reference is not None
     assert reference.text() == "ICD-9: 00.00"
     assert all("PZ-SYN" not in label.text() for label in card.findChildren(QLabel))
+    view.deleteLater()
+
+
+def _card_in_day_column(view: ViewSaleOperatorie, width: int, **fields: object) -> QWidget:
+    """Show an operation card in a weekly-table day column ``width`` px wide."""
+    view.stacked_widget.setCurrentIndex(1)
+    view.resize(1600, 900)
+    view.show()
+    view.tabella.setColumnCount(5)  # Monday to Friday, as the controller lays out a week
+    view.tabella.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.Fixed)
+    view.tabella.setColumnWidth(0, width)
+    card = view.crea_widget_operazione(
+        {
+            "nome_paziente": "Synthetic",
+            "codice_intervento": "00.00",
+            "ora_inizio": "08:00",
+            "ora_fine": "12:45",
+            "durata": 285,
+            "sala_operatoria": "OR-1",
+            "complessita": "Media",
+            **fields,
+        }
+    )
+    view.tabella.setCellWidget(2, 0, card)
+    return card
+
+
+def _fits(label: QLabel) -> bool:
+    return label.fontMetrics().horizontalAdvance(label.text()) <= label.contentsRect().width()
+
+
+def _first_row(card: QWidget) -> tuple[QLabel, QLabel, QLabel]:
+    room, time, duration = (
+        card.findChild(QLabel, name) for name in ("BadgeSalaOp", "LblOraOp", "BadgeDurataOp")
+    )
+    return room, time, duration
+
+
+# Day column width of the weekly table for each window width, measured in the full app.
+@pytest.mark.parametrize(
+    "width", [159, 176, 191, 210, 287], ids=["1280", "1366", "1440", "1536", "1920"]
+)
+def test_operation_card_never_cuts_room_and_time(qt_app: QApplication, width: int) -> None:
+    view = ViewSaleOperatorie()
+    card = _card_in_day_column(view, width)
+    qt_app.processEvents()
+
+    room, time, duration = _first_row(card)
+    assert room.isVisible() and time.isVisible()
+    for label in (room, time, duration):
+        if label.isVisible():
+            assert label.width() >= label.sizeHint().width(), f"{label.text()!r} is squeezed"
+            assert label.geometry().right() < card.width(), f"{label.text()!r} overflows"
+    # The time range already gives the duration: its badge only goes when there is no room.
+    assert duration.isVisible() or width < 287
+    view.close()
+    view.deleteLater()
+
+
+def test_operation_card_duration_badge_returns_when_the_column_widens(
+    qt_app: QApplication,
+) -> None:
+    view = ViewSaleOperatorie()
+    card = _card_in_day_column(view, 159)
+    qt_app.processEvents()
+    duration = _first_row(card)[2]
+    assert not duration.isVisible()
+
+    view.tabella.setColumnWidth(0, 287)
+    qt_app.processEvents()
+
+    assert duration.isVisible()
+    assert duration.width() >= duration.sizeHint().width()
+    view.close()
+    view.deleteLater()
+
+
+@pytest.mark.parametrize("width", [159, 191, 287], ids=["1280", "1440", "1920"])
+def test_operation_card_shows_only_whole_icd_codes(qt_app: QApplication, width: int) -> None:
+    view = ViewSaleOperatorie()
+    card = _card_in_day_column(
+        view, width, interventi=[{"codice": "39.50"}, {"codice": "39.90"}]
+    )
+    qt_app.processEvents()
+
+    codes = card.findChild(QLabel, "LblSubOp")
+    assert _fits(codes), f"{codes.text()!r} is cut"
+    # A cut "39.90" reads as "39.9", another valid code: hidden codes are counted instead.
+    shown = re.findall(r"\d+\.\d+", codes.text())
+    assert shown == ["39.50", "39.90"][: len(shown)] and shown
+    assert len(shown) == 2 or codes.text().endswith("+1")
+    if width == 287:
+        assert codes.text() == "ICD-9: 39.50  ·  39.90"
+    view.close()
+    view.deleteLater()
+
+
+@pytest.mark.parametrize("width", [159, 287], ids=["1280", "1920"])
+def test_operation_card_elides_a_long_patient_name(qt_app: QApplication, width: int) -> None:
+    view = ViewSaleOperatorie()
+    name = "Synthetic Patient Longname"
+    card = _card_in_day_column(view, width, nome_paziente=name)
+    qt_app.processEvents()
+
+    label = card.findChild(QLabel, "LblNomePazOp")
+    assert _fits(label), f"{label.text()!r} is cut"
+    assert label.text() == name if width == 287 else label.text().endswith("…")
+    view.close()
     view.deleteLater()
 
 

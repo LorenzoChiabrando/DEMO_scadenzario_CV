@@ -10,6 +10,7 @@ from PySide6.QtCore import Qt
 from PySide6.QtGui import QPixmap, QColor
 
 from src.views.components.colored_header_view import ColoredHeaderView
+from src.views.components.modal_dialog import register_icon_path
 from src.calendar_presentation import ROLE_HEADER_COLORS, row_display_label
 from src.views.models.activity_table_model import ROW_KEYS, ActivityTableModel
 from src.views.models.resident_table_model import ResidentTableModel
@@ -472,6 +473,7 @@ class ViewScadenzario(QWidget):
 
     def load_styles(self):
         style_path = os.path.join(PROJECT_ROOT, "asset", "styles", "scadenzario.qss")
+        register_icon_path()  # la freccia dei menu usa url(icons:...)
         if os.path.exists(style_path):
             with open(style_path, "r", encoding="utf-8") as f:
                 self.setStyleSheet(self.styleSheet() + "\n" + f.read())

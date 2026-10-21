@@ -17,6 +17,14 @@ QComboBox#ComboVersioneSale:disabled {
     color: #64748b;
     background-color: #e2e8f0;
 }
+/* Senza queste due regole Qt disegna la tendina di sistema, con un bordo scuro. */
+QComboBox#ComboVersioneSale::drop-down {
+    border: none;
+    width: 26px;
+}
+QComboBox#ComboVersioneSale::down-arrow {
+    image: url(icons:chevron-down.svg);
+}
 
 /* =========================================
    PAGINA SELEZIONE

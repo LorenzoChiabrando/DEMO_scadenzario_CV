@@ -11,9 +11,50 @@ from PySide6.QtGui import QPixmap, QColor, QFont, QDrag, QPainter
 
 from src.calendar_presentation import person_initials
 from src.calendar_versions import CalendarVersion
+from src.views.components.modal_dialog import register_icon_path
 
 
 _OPERATION_MIME_TYPE = "application/x-mmsd-operation"
+
+
+class EtichettaAdattiva(QLabel):
+    """Etichetta che mostra la più completa delle ``varianti`` di testo che ci sta intera.
+
+    Le varianti vanno dalla più lunga alla più corta; se nessuna ci sta, l'ultima viene
+    accorciata con «…». La larghezza suggerita è ignorata: il layout le dà lo spazio che
+    resta, così il testo non comprime i badge accanto e Qt non lo taglia a metà carattere.
+    """
+
+    def __init__(self, varianti: list[str]):
+        super().__init__(varianti[0])
+        self._varianti = varianti
+        self.setSizePolicy(QSizePolicy.Policy.Ignored, QSizePolicy.Policy.Preferred)
+
+    def resizeEvent(self, event):
+        super().resizeEvent(event)
+        metriche = self.fontMetrics()
+        spazio = self.contentsRect().width()
+        testo = next(
+            (t for t in self._varianti if metriche.horizontalAdvance(t) <= spazio),
+            metriche.elidedText(self._varianti[-1], Qt.TextElideMode.ElideRight, spazio),
+        )
+        if testo != self.text():
+            self.setText(testo)
+
+
+def varianti_codici(codici: list[str]) -> list[str]:
+    """Testi per la riga dei codici ICD-9, dal più completo al più corto.
+
+    Un codice compare sempre intero: quelli che non ci stanno sono contati con «+N»,
+    perché un codice tagliato («39.9» al posto di «39.90») sembrerebbe un altro codice.
+    """
+    varianti = []
+    for prefisso in ("ICD-9: ", ""):
+        for mostrati in range(len(codici), 0, -1):
+            nascosti = len(codici) - mostrati
+            testo = prefisso + "  ·  ".join(codici[:mostrati])
+            varianti.append(f"{testo}  +{nascosti}" if nascosti else testo)
+    return varianti
 
 
 class DraggableOperationFrame(QFrame):
@@ -27,6 +68,35 @@ class DraggableOperationFrame(QFrame):
         self._can_drag = False
         self._dragging = False
         self._on_click = None
+        self._riga_comprimibile: tuple[QHBoxLayout, QLabel] | None = None
+
+    def set_badge_facoltativo(self, riga: QHBoxLayout, badge: QLabel) -> None:
+        """Mostra ``badge`` solo quando l'intera ``riga`` ci sta senza comprimere le etichette.
+
+        Sotto la larghezza minima Qt stringe tutte le etichette della riga e le taglia;
+        togliendo il badge facoltativo le altre restano sempre leggibili per intero.
+        """
+        self._riga_comprimibile = (riga, badge)
+
+    def resizeEvent(self, event):
+        super().resizeEvent(event)
+        self._adatta_badge_facoltativo()
+
+    def _adatta_badge_facoltativo(self) -> None:
+        if self._riga_comprimibile is None or self.layout() is None:
+            return
+        riga, badge = self._riga_comprimibile
+        self.ensurePolished()  # le misure delle etichette dipendono dal foglio di stile
+        widgets = [riga.itemAt(i).widget() for i in range(riga.count())]
+        larghezze = [w.sizeHint().width() for w in widgets if w is not None]
+        necessaria = sum(larghezze) + riga.spacing() * (len(larghezze) - 1)
+        margini = self.layout().contentsMargins()
+        disponibile = self.contentsRect().width() - margini.left() - margini.right()
+        if badge.isVisibleTo(self) != (necessaria <= disponibile):
+            badge.setVisible(necessaria <= disponibile)
+            # Il layout ha già diviso lo spazio per questa misura: va rifatto adesso,
+            # non al prossimo giro dell'event loop, o l'orario resta compresso.
+            self.layout().activate()
 
     def setup_drag(self, col: int, op_idx: int, enabled: bool):
         self._drag_col = col
@@ -249,6 +319,8 @@ class TabellaOperatorie(QTableWidget):
 
 class ViewSaleOperatorie(QWidget):
     DEFAULT_OPS = 5   # righe operazione visibili di default
+    MIN_VISIBLE_OPS = 2   # sotto, la tabella scorre invece di spingere fuori i pulsanti
+    ACTION_HEIGHT = 52
     MAX_OPS = 24      # 12 interventi per ciascuna delle due sale fisiche
 
     def __init__(self):
@@ -268,21 +340,6 @@ class ViewSaleOperatorie(QWidget):
     def setup_ui(self):
         main_layout = QVBoxLayout(self)
         main_layout.setContentsMargins(0, 0, 0, 0)
-
-        version_tools = QHBoxLayout()
-        version_tools.setContentsMargins(30, 16, 30, 0)
-        version_label = QLabel("Versione:")
-        version_label.setObjectName("LblCalendarTools")
-        version_tools.addWidget(version_label)
-        self.combo_versione = QComboBox()
-        self.combo_versione.setObjectName("ComboVersioneSale")
-        self.combo_versione.setMinimumWidth(145)
-        self.combo_versione.addItem("Previsto", CalendarVersion.PREVISTO)
-        self.combo_versione.addItem("Effettivo", CalendarVersion.EFFETTIVO)
-        self.combo_versione.setAccessibleName("Versione del calendario sale operatorie")
-        version_tools.addWidget(self.combo_versione)
-        version_tools.addStretch()
-        main_layout.addLayout(version_tools)
 
         self.stacked_widget = QStackedWidget()
         main_layout.addWidget(self.stacked_widget)
@@ -412,6 +469,27 @@ class ViewSaleOperatorie(QWidget):
 
         layout.addLayout(nav)
 
+        # Come nello Scadenzario: la versione si sceglie accanto al calendario che cambia.
+        version_row = QHBoxLayout()
+        version_row.setSpacing(12)
+        version_label = QLabel("Versione:")
+        version_label.setObjectName("LblCalendarTools")
+        version_row.addWidget(version_label)
+        self.combo_versione = QComboBox()
+        self.combo_versione.setObjectName("ComboVersioneSale")
+        self.combo_versione.setMinimumWidth(145)
+        self.combo_versione.addItem("Previsto", CalendarVersion.PREVISTO)
+        self.combo_versione.addItem("Effettivo", CalendarVersion.EFFETTIVO)
+        self.combo_versione.setAccessibleName("Versione del calendario sale operatorie")
+        version_row.addWidget(self.combo_versione)
+        self.lbl_versione_status = QLabel()
+        self.lbl_versione_status.setObjectName("LblCellDetail")
+        self.lbl_versione_status.setWordWrap(True)
+        self.lbl_versione_status.hide()
+        version_row.addWidget(self.lbl_versione_status, 1)
+        version_row.addStretch()  # tiene il menu a sinistra quando il messaggio è nascosto
+        layout.addLayout(version_row)
+
         tools = QHBoxLayout()
         tools.setSpacing(8)
         lbl_vista = QLabel("Visualizzazione:")
@@ -444,12 +522,6 @@ class ViewSaleOperatorie(QWidget):
         tools.addWidget(self.btn_esporta_pdf)
         layout.addLayout(tools)
 
-        self.lbl_versione_status = QLabel()
-        self.lbl_versione_status.setObjectName("LblCellDetail")
-        self.lbl_versione_status.setWordWrap(True)
-        self.lbl_versione_status.hide()
-        layout.addWidget(self.lbl_versione_status)
-
         self.tabella = TabellaOperatorie()
         self.tabella.setRowCount(2 + self.current_max_ops)
         self.tabella.setVerticalHeaderLabels(self.row_labels)
@@ -481,31 +553,31 @@ class ViewSaleOperatorie(QWidget):
 
         self.btn_pianifica = QPushButton("PIANIFICA SETTIMANA")
         self.btn_pianifica.setObjectName("BtnPianifica")
-        self.btn_pianifica.setFixedHeight(56)
-        self.btn_pianifica.setCursor(Qt.CursorShape.PointingHandCursor)
         self.btn_pianifica.setVisible(False)
-        layout.addWidget(self.btn_pianifica)
 
         self.btn_pulisci = QPushButton("PULISCI PIANO")
         self.btn_pulisci.setObjectName("BtnPulisci")
-        self.btn_pulisci.setFixedHeight(44)
-        self.btn_pulisci.setCursor(Qt.CursorShape.PointingHandCursor)
         self.btn_pulisci.setVisible(False)
-        layout.addWidget(self.btn_pulisci)
 
         self.btn_crea_effettivo = QPushButton("CREA EFFETTIVO DAL PREVISTO CONVALIDATO")
         self.btn_crea_effettivo.setObjectName("BtnConvalida")
-        self.btn_crea_effettivo.setFixedHeight(44)
-        self.btn_crea_effettivo.setCursor(Qt.CursorShape.PointingHandCursor)
         self.btn_crea_effettivo.hide()
-        layout.addWidget(self.btn_crea_effettivo)
 
         self.btn_convalida = QPushButton("CONVALIDA SETTIMANA")
         self.btn_convalida.setObjectName("BtnConvalida")
-        self.btn_convalida.setFixedHeight(56)
-        self.btn_convalida.setCursor(Qt.CursorShape.PointingHandCursor)
         self.btn_convalida.setVisible(False)
-        layout.addWidget(self.btn_convalida)
+
+        # Azioni su una riga sola: impilate superavano l'altezza di uno schermo da portatile.
+        azioni = QHBoxLayout()
+        azioni.setSpacing(12)
+        for pulsante in (
+            self.btn_pianifica, self.btn_pulisci, self.btn_crea_effettivo, self.btn_convalida,
+        ):
+            pulsante.setFixedHeight(self.ACTION_HEIGHT)
+            pulsante.setCursor(Qt.CursorShape.PointingHandCursor)
+            azioni.addWidget(pulsante, 1)
+        layout.addLayout(azioni)
+        layout.addStretch()  # lo spazio in più va sotto i pulsanti, non dentro la tabella
 
         self.stacked_widget.addWidget(self.page_calendario)
 
@@ -591,19 +663,18 @@ class ViewSaleOperatorie(QWidget):
         self._adatta_altezza_tabella()
 
     def _adatta_altezza_tabella(self):
-        """Imposta altezza minima sufficiente a mostrare DEFAULT_OPS righe operazione."""
+        """Tutte le righe se c'è spazio, almeno MIN_VISIBLE_OPS interventi se lo schermo è basso.
+
+        Il massimo evita lo spazio bianco sotto l'ultima riga; il minimo basso lascia la
+        pagina dentro uno schermo da portatile: la tabella scorre, i pulsanti restano visibili.
+        """
         h_header = self.tabella.horizontalHeader().height()
         if h_header <= 0:
             h_header = 42
-        h_min = (
-            h_header
-            + self.tabella.rowHeight(0)
-            + self.tabella.rowHeight(1)
-            + sum(self.tabella.rowHeight(i) for i in range(2, 2 + self.DEFAULT_OPS))
-            + 4
-        )
-        self.tabella.setMinimumHeight(h_min)
-        self.tabella.setMaximumHeight(16777215)
+        h_fisse = h_header + self.tabella.rowHeight(0) + self.tabella.rowHeight(1) + 4
+        h_operazioni = [self.tabella.rowHeight(i) for i in range(2, self.tabella.rowCount())]
+        self.tabella.setMinimumHeight(h_fisse + sum(h_operazioni[: self.MIN_VISIBLE_OPS]))
+        self.tabella.setMaximumHeight(h_fisse + sum(h_operazioni))
 
     def crea_item_giorno(self, nome_giorno, is_festivo, is_oggi=False):
         display_name = nome_giorno[:1] if self._month_mode else nome_giorno
@@ -681,12 +752,13 @@ class ViewSaleOperatorie(QWidget):
             return frame
 
         vl = QVBoxLayout(frame)
-        vl.setContentsMargins(10, 6, 10, 6)
+        vl.setContentsMargins(8, 6, 8, 6)
         vl.setSpacing(3)
 
         ora_row = QHBoxLayout()
         ora_row.setSpacing(6)
-        lbl_ora = QLabel(f"{op.get('ora_inizio','?')} – {op.get('ora_fine','?')}")
+        # Senza spazi attorno al trattino: a 1280 px sala e orario stanno interi nella colonna.
+        lbl_ora = QLabel(f"{op.get('ora_inizio','?')}–{op.get('ora_fine','?')}")
         lbl_ora.setObjectName("LblOraOp")
         lbl_ora.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents, True)
         room_id = op.get("sala_operatoria", "")
@@ -701,8 +773,10 @@ class ViewSaleOperatorie(QWidget):
         ora_row.addWidget(lbl_ora)
         ora_row.addStretch()
         ora_row.addWidget(badge_dur)
+        # La durata si ricava già dall'orario: è il badge che lascia spazio se la colonna è stretta.
+        frame.set_badge_facoltativo(ora_row, badge_dur)
 
-        lbl_nome = QLabel(op.get("nome_paziente", "—"))
+        lbl_nome = EtichettaAdattiva([op.get("nome_paziente", "—")])
         lbl_nome.setObjectName("LblNomePazOp")
         lbl_nome.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents, True)
 
@@ -711,17 +785,15 @@ class ViewSaleOperatorie(QWidget):
 
         interventi_list = op.get("interventi", [])
         codici = [i.get("codice", "") for i in interventi_list if i.get("codice")]
-        codici_text = "  ·  ".join(codici) if codici else op.get("codice_intervento", "")
-        references = []
-        if codici_text:
-            references.append(f"ICD-9: {codici_text}")
-        if references:
-            lbl_codici = QLabel("  ·  ".join(references))
+        if not codici and op.get("codice_intervento"):
+            codici = [op["codice_intervento"]]
+        if codici:
+            lbl_codici = EtichettaAdattiva(varianti_codici(codici))
             lbl_codici.setObjectName("LblSubOp")
             lbl_codici.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents, True)
-            bottom_row.addWidget(lbl_codici)
-
-        bottom_row.addStretch()
+            bottom_row.addWidget(lbl_codici, 1)  # prende lo spazio fino al badge complessità
+        else:
+            bottom_row.addStretch()
 
         cpx = op.get("complessita", "")
         if cpx:
@@ -814,6 +886,7 @@ class ViewSaleOperatorie(QWidget):
 
     def load_styles(self):
         style_path = os.path.join(PROJECT_ROOT, "asset", "styles", "sale_operatorie.qss")
+        register_icon_path()  # la freccia del menu Versione usa url(icons:...)
         if os.path.exists(style_path):
             with open(style_path, "r", encoding="utf-8") as f:
                 self.setStyleSheet(self.styleSheet() + "\n" + f.read())

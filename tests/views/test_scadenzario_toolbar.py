@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import pytest
 from PySide6.QtCore import QPoint
+from PySide6.QtGui import QColor
 from PySide6.QtWidgets import QApplication, QFrame, QLabel
 
 from src.roster_month import RosterMonth
@@ -37,6 +38,25 @@ def test_guard_legend_is_compact_and_shares_the_tools_row(qt_app: QApplication) 
     assert export_right <= view.width()
     assert view.findChild(QFrame, "PannelloTurni") is None
     view.close()
+
+
+def test_version_selector_shows_its_drop_down_arrow(qt_app: QApplication) -> None:
+    view = ViewScadenzario()
+    view.stacked_widget.setCurrentIndex(1)
+    view.resize(860, 700)
+    view.show()
+    qt_app.processEvents()
+
+    image = view.combo_versione.grab().toImage()
+    drop_down = [
+        QColor(image.pixel(x, y)).lightness()
+        for x in range(image.width() - 30, image.width())
+        for y in range(image.height())
+    ]
+    view.close()
+
+    assert min(drop_down) >= 90, "native drop-down frame drawn instead of the QSS one"
+    assert min(drop_down) < 200, "drop-down arrow missing"
 
 
 def test_full_month_view_shows_every_day_without_scrolling(qt_app: QApplication) -> None:
