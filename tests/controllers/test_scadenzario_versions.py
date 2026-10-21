@@ -16,6 +16,7 @@ from PySide6.QtWidgets import (
 )
 
 from src.calendar_versions import CalendarVersion
+from src.controllers import controller_scadenzario
 from src.controllers.controller_scadenzario import (
     ControllerScadenzario,
     build_scadenzario_pdf_document,
@@ -178,6 +179,84 @@ def test_history_uses_both_versions_and_month_navigation_preserves_actual_select
     assert roster.view.combo_versione.currentData() == CalendarVersion.EFFETTIVO.value
     assert _value(roster, 4, 0) == "Gamma R."
     assert _snapshot(tmp_path) == before
+
+
+def _history_with_an_unconfirmed_gap(tmp_path: Path) -> None:
+    """August and October (the current month) confirmed, September still a draft."""
+    _write(tmp_path / "scadenzario/2026-08.json", _month("CONVALIDATO", month=8))
+    _write(tmp_path / "scadenzario/2026-09.json", _month())
+    _write(tmp_path / "scadenzario/2026-10.json", _month("CONVALIDATO", month=10))
+
+
+@pytest.mark.parametrize("version", list(CalendarVersion))
+def test_history_lists_only_months_with_a_confirmed_plan(
+    roster: ControllerScadenzario,
+    tmp_path: Path,
+    version: CalendarVersion,
+) -> None:
+    # As the operating rooms list only confirmed weeks: a draft never confirmed is not history.
+    _history_with_an_unconfirmed_gap(tmp_path)
+    _select(roster, version)
+
+    roster.apri_calendario("STORICO")
+    assert (roster.anno_corrente, roster.mese_corrente) == (2026, 10)
+    assert roster.view.btn_next.isHidden()
+    assert not roster.view.btn_prev.isHidden()
+
+    roster.mese_precedente()
+    assert roster.mese_corrente == 8
+    assert roster.view.btn_prev.isHidden()
+    assert not roster.view.btn_next.isHidden()
+
+    roster.mese_successivo()
+    assert roster.mese_corrente == 10
+
+
+@pytest.mark.parametrize(
+    ("picked", "shown"),
+    [((9, 2026), 8), ((12, 2026), 10), ((1, 2026), 8)],
+    ids=["draft-gap", "after-last", "before-first"],
+)
+def test_history_month_picker_lands_on_a_confirmed_month(
+    roster: ControllerScadenzario,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    picked: tuple[int, int],
+    shown: int,
+) -> None:
+    _history_with_an_unconfirmed_gap(tmp_path)
+    roster.apri_calendario("STORICO")
+
+    class Pick:
+        def __init__(self, *_args: object) -> None:
+            pass
+
+        def exec(self) -> int:
+            return 1
+
+        def get_selezione(self) -> tuple[int, int]:
+            return picked
+
+    monkeypatch.setattr(controller_scadenzario, "DialogMeseAnno", Pick)
+    roster.scegli_mese_anno()
+
+    assert (roster.anno_corrente, roster.mese_corrente) == (2026, shown)
+
+
+def test_history_without_confirmed_months_stays_on_the_dashboard(
+    roster: ControllerScadenzario,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _write(tmp_path / "scadenzario/2026-09.json", _month())
+    roster.torna_alla_dashboard()
+    shown = _record_warnings(monkeypatch)
+
+    roster.apri_calendario("STORICO")
+
+    assert shown and shown[0].startswith("Nessuno storico")
+    assert roster.modalita_corrente is None
+    assert roster.view.stacked_widget.currentIndex() == 0
 
 
 def test_explicit_creation_initializes_legacy_actual_without_altering_planned(

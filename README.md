@@ -144,6 +144,10 @@ periodo né vista dal menu **Calendario** nello Scadenzario e **Versione** nelle
   prima di questa funzione c'è il pulsante **Crea Effettivo dal Previsto**. La copia si
   corregge senza toccare il Previsto, anche dallo Storico. Leggere un Effettivo mancante non
   crea file.
+- Lo **Storico** contiene solo i periodi con il Previsto convalidato: i mesi nello Scadenzario,
+  le settimane nelle Sale. Un periodo passato rimasto in bozza non compare e le frecce lo
+  saltano. Lì il Previsto è in sola lettura; l'Effettivo si corregge finché non viene
+  convalidato.
 - Sala Op. I e II si sincronizzano con le Sale operatorie della stessa versione. Nell'Effettivo
   una settimana delle Sale non ancora creata non viene toccata, e una modifica che contraddice
   gli interventi già assegnati in quella sala viene rifiutata.

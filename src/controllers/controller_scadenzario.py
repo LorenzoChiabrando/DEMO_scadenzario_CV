@@ -314,6 +314,33 @@ class ControllerScadenzario:
             else:
                 return datetime.date(self.real_anno, self.real_mese - 1, 1)
 
+    def _mesi_storici(self) -> list[tuple[int, int]]:
+        """Mesi dello Storico, in ordine: Previsto convalidato e non oltre il mese corrente.
+
+        Come per le settimane delle Sale operatorie, un mese mai convalidato non è storia:
+        resta una bozza e non compare, anche se è passato.
+        """
+        limite = self.get_max_history_date()
+        return [
+            (anno, mese)
+            for anno, mese in self._mesi_disponibili()
+            if datetime.date(anno, mese, 1) <= limite
+            and self._model_previsto.has_mese(anno, mese)
+            and self._model_previsto.get_stato_mese(anno, mese) == "CONVALIDATO"
+        ]
+
+    def _vai_al_mese_storico(self, direzione: int) -> None:
+        """Passa al mese convalidato precedente (-1) o successivo (+1), saltando le bozze."""
+        corrente = (self.anno_corrente, self.mese_corrente)
+        candidati = [
+            mese for mese in self._mesi_storici()
+            if (mese < corrente if direzione < 0 else mese > corrente)
+        ]
+        if candidati:
+            self.anno_corrente, self.mese_corrente = (
+                candidati[-1] if direzione < 0 else candidati[0]
+            )
+
     def convalida_mese(self):
         if not self._puo_modificare():
             return
@@ -405,16 +432,14 @@ class ControllerScadenzario:
 
     def _apri_calendario(self, modalita):
         if modalita == "STORICO":
-            max_history_date = self.get_max_history_date()
-
-            mesi_disp = self._mesi_disponibili()
-            storici_validi = [(a, m) for a, m in mesi_disp if datetime.date(a, m, 1) <= max_history_date]
+            storici_validi = self._mesi_storici()
 
             if not storici_validi:
                 messages.show_message(
                     self.view,
                     f"Nessuno storico · {self._nome_versione}",
-                    "Non sono presenti dati di mesi passati o convalidati salvati nel sistema.",
+                    "Non ci sono ancora mesi convalidati nello storico.\n"
+                    "Convalida il Previsto di un mese da Mese Corrente o Pianificazione.",
                     section=_SEZIONE,
                 )
                 return
@@ -460,21 +485,10 @@ class ControllerScadenzario:
                 self.view.btn_prev.setVisible(False)
 
         elif self.modalita_corrente == "STORICO":
-            max_history_date = self.get_max_history_date()
-
-            if view_date >= max_history_date:
-                self.view.btn_next.setVisible(False)
-
-            mesi_disp = self._mesi_disponibili()
-            storici_validi = [(a, m) for a, m in mesi_disp if datetime.date(a, m, 1) <= max_history_date]
-
-            if storici_validi:
-                min_y, min_m = storici_validi[0]
-                min_history_date = datetime.date(min_y, min_m, 1)
-                if view_date <= min_history_date:
-                    self.view.btn_prev.setVisible(False)
-            else:
-                self.view.btn_prev.setVisible(False)
+            corrente = (self.anno_corrente, self.mese_corrente)
+            storici_validi = self._mesi_storici()
+            self.view.btn_prev.setVisible(any(mese < corrente for mese in storici_validi))
+            self.view.btn_next.setVisible(any(mese > corrente for mese in storici_validi))
 
     def torna_alla_dashboard(self):
         self.modalita_corrente = None
@@ -828,7 +842,9 @@ class ControllerScadenzario:
 
     def mese_precedente(self):
         with self._resta_sul_mese_se_danneggiato():
-            if self.mese_corrente == 1:
+            if self.modalita_corrente == "STORICO":
+                self._vai_al_mese_storico(-1)
+            elif self.mese_corrente == 1:
                 self.mese_corrente = 12
                 self.anno_corrente -= 1
             else:
@@ -837,7 +853,9 @@ class ControllerScadenzario:
 
     def mese_successivo(self):
         with self._resta_sul_mese_se_danneggiato():
-            if self.mese_corrente == 12:
+            if self.modalita_corrente == "STORICO":
+                self._vai_al_mese_storico(1)
+            elif self.mese_corrente == 12:
                 self.mese_corrente = 1
                 self.anno_corrente += 1
             else:
@@ -866,27 +884,14 @@ class ControllerScadenzario:
                 self.mese_corrente = self.real_mese + 1
 
         elif self.modalita_corrente == "STORICO":
-            max_history_date = self.get_max_history_date()
-
-            mesi_disp = self._mesi_disponibili()
-            storici_validi = [(a, m) for a, m in mesi_disp if datetime.date(a, m, 1) <= max_history_date]
-
-            if not storici_validi:
-                self.mese_corrente = max_history_date.month
-                self.anno_corrente = max_history_date.year
-            else:
-                min_y, min_m = storici_validi[0]
-                min_history_date = datetime.date(min_y, min_m, 1)
-
-                if selected_date > max_history_date:
-                    self.mese_corrente = max_history_date.month
-                    self.anno_corrente = max_history_date.year
-                elif selected_date < min_history_date:
-                    self.mese_corrente = min_m
-                    self.anno_corrente = min_y
-                else:
-                    self.mese_corrente = selected_mese
-                    self.anno_corrente = selected_anno
+            # L'ultimo mese convalidato fino a quello scelto; prima del primo, il primo.
+            storici_validi = self._mesi_storici()
+            if storici_validi:
+                scelta = (selected_anno, selected_mese)
+                precedenti = [mese for mese in storici_validi if mese <= scelta]
+                self.anno_corrente, self.mese_corrente = (
+                    precedenti[-1] if precedenti else storici_validi[0]
+                )
         else:
             self.mese_corrente = selected_mese
             self.anno_corrente = selected_anno
