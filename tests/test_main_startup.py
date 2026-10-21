@@ -95,6 +95,14 @@ def test_logging_writes_to_a_rotating_file(tmp_path: Path, root_logger: logging.
     assert "messaggio di prova" in log_file.read_text(encoding="utf-8")
 
 
+def test_the_executable_logs_in_the_user_folder(monkeypatch: pytest.MonkeyPatch) -> None:
+    assert main.default_log_file() == main.PROJECT_ROOT / "logs" / "mmsd-cv.log"
+
+    monkeypatch.setattr(main.sys, "frozen", True, raising=False)
+
+    assert main.default_log_file() == main.user_app_directory() / "logs" / "mmsd-cv.log"
+
+
 def test_an_unwritable_log_folder_does_not_block_startup(
     tmp_path: Path, root_logger: logging.Logger
 ) -> None:
